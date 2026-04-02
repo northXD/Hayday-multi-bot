@@ -4,7 +4,7 @@ Hello and welcome to NXRTH Hayday Multibot repository. I was developing this Pro
 
 Anyway, Here's what you need to know:
 
-You copy / use my code and do whatever you want with it. I would love to see your forks!
+You can copy / use my code and do whatever you want with it. I would love to see your forks!
 
 ## 📖 About
 A farming bot application with very cool gui, written in C++ for Hayday.
