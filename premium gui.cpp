@@ -2008,7 +2008,7 @@ void RenderApp() {
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::TextWrapped(Tr("Want to ask something? ping me @inna in server. i will reply asap."));
+            ImGui::TextWrapped(Tr("Want to ask something? ping me @Nxr in server. i will reply asap."));
             ImGui::Spacing(); ImGui::Spacing();
 
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.12f, 0.12f, 1.00f));
@@ -2029,7 +2029,7 @@ void RenderApp() {
                 ImGui::Indent();
                 ImGui::TextWrapped(Tr("Modes: Single Account Mode: It just plants, harvests, sells and repeats. Multi Account Mode: Bot Plants, Harvests, sells, changes account, repeats. After all accounts done, return to first account and so on."));
                 ImGui::Spacing();
-                ImGui::TextWrapped(Tr("To enable this you must Save your accounts. Enables automatically."));
+                ImGui::TextWrapped(Tr("To enable Multi account mode, you must Save at least 2 accounts and enable in bot config tab."));
                 ImGui::Spacing();
                 ImGui::TextWrapped(Tr("How to save account : Create New account in Account management tab, After skipping tutorials and getting to farm level 7, Press \"Save Slot Data\"."));
                 ImGui::TextWrapped(Tr("If you want to change accounts manually you can press \"Load Slot Data\". Dont press this if you haven't saved account yet."));
@@ -2043,6 +2043,7 @@ void RenderApp() {
             if (ImGui::CollapsingHeader(Tr("3. Auto Tom"))) {
                 ImGui::Indent();
                 ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), Tr("Read These Carefully or your bot can break."));
+				ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("WARNING!!! I Quitted developing this bot project, and auto tom was not done. IT MAY NOT WORK PERFECTLY."));
                 ImGui::TextWrapped(Tr("To use Auto Tom, make sure Tom is not on Cooldown."));
                 ImGui::TextWrapped(Tr("if bot can't find tom's crate, then make your own template."));
                 ImGui::Unindent();
@@ -2052,6 +2053,7 @@ void RenderApp() {
             // 4. AUTO TRANSFER BEM/SEM
             if (ImGui::CollapsingHeader(Tr("4. Auto Transfer Bem/Sem"))) {
                 ImGui::Indent();
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("WARNING!!! I Quitted developing this bot project, and auto transfer bem/sem was not done. IT MAY NOT WORK PERFECTLY."));
                 ImGui::TextWrapped(Tr("You have to enable instance 6 and put an account there. it will Work as storage account there."));
                 ImGui::Spacing();
                 ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("DONT ADD FRIEND YOUR BOTS MANUALLY. yes, you heard it. IF you already added your bots, please remove them. my bot will automatically add friend."));
