@@ -499,11 +499,9 @@ void InjectImportantFiles(int instanceId) {
 // ACCOUNT SAVER
 void SaveAccountToSlot(int instanceId, int slotIndex) {
     AddLog(instanceId, Tr("Saving & Encrypting Account Data..."), ImVec4(1, 1, 0, 1));
-    char buffer[MAX_PATH];
-    GetModuleFileNameA(NULL, buffer, MAX_PATH);
-    std::string::size_type pos = std::string(buffer).find_last_of("\\/");
-    std::string exeDir = std::string(buffer).substr(0, pos);
-    std::string folderPath = exeDir + "\\Backups\\Instance_" + std::to_string(instanceId);
+
+    // DOĞRUDAN SENİN EXTERN FONKSİYONUNU KULLANIYORUZ
+    std::string folderPath = GetAppDataPath() + "\\Backups\\Instance_" + std::to_string(instanceId);
     if (!fs::exists(folderPath)) fs::create_directories(folderPath);
 
     std::string pcFileName = folderPath + "\\account_" + std::to_string(slotIndex + 1) + ".nxrth";
@@ -522,7 +520,7 @@ void SaveAccountToSlot(int instanceId, int slotIndex) {
         std::string rawData((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
         inFile.close();
 
-		std::string encryptedData = EncryptXORHex(rawData, "NXRTH_LOCAL_ACCOUNT_KEY"); // SUPER DUPER SECRET KEY IN HERE TOO, PLEASE DONT LEAKXDDDDD.
+        std::string encryptedData = EncryptXORHex(rawData, "NXRTH_LOCAL_ACCOUNT_KEY"); // SUPER DUPER SECRET KEY
 
         std::ofstream outFile(pcFileName, std::ios::binary);
         outFile << encryptedData;
@@ -538,7 +536,10 @@ void SaveAccountToSlot(int instanceId, int slotIndex) {
         AddLog(instanceId, Tr("Save Failed. Check Settings."), ImVec4(1, 0, 0, 1));
     }
 }
-// DECRYPT FUNCTUON FOR ACCOUNTS N OTHER STUFF USED.
+
+// =========================================================
+// DECRYPT FUNCTION FOR ACCOUNTS N OTHER STUFF USED.
+// =========================================================
 std::string DecryptPureXORHex(const std::string& hexStr, const std::string& key) {
     std::string text;
     if (hexStr.length() % 2 != 0) return "";
@@ -550,14 +551,13 @@ std::string DecryptPureXORHex(const std::string& hexStr, const std::string& key)
     return text;
 }
 
+// =========================================================
 // ACCOUNT LOADER
+// =========================================================
 void LoadAccountFromSlot(int instanceId, int slotIndex) {
-    char buffer[MAX_PATH];
-    GetModuleFileNameA(NULL, buffer, MAX_PATH);
-    std::string::size_type pos = std::string(buffer).find_last_of("\\/");
-    std::string exeDir = std::string(buffer).substr(0, pos);
-
-    std::string pcFileName = exeDir + "\\Backups\\Instance_" + std::to_string(instanceId) + "\\account_" + std::to_string(slotIndex + 1) + ".nxrth";
+    // DOĞRUDAN SENİN EXTERN FONKSİYONUNU KULLANIYORUZ
+    std::string folderPath = GetAppDataPath() + "\\Backups\\Instance_" + std::to_string(instanceId);
+    std::string pcFileName = folderPath + "\\account_" + std::to_string(slotIndex + 1) + ".nxrth";
 
     if (!fs::exists(pcFileName)) {
         AddLog(instanceId, Tr("Error: Slot file empty or missing!"), ImVec4(1, 0, 0, 1));
@@ -572,7 +572,6 @@ void LoadAccountFromSlot(int instanceId, int slotIndex) {
     // 1. DECRYPT ACCOUNT FILES ACCOUNT*.NXRTH'S.
     std::string rawData = DecryptXORHex(encryptedData, "NXRTH_LOCAL_ACCOUNT_KEY");
 
-
     if (rawData.find("<?xml") == std::string::npos) {
         rawData = DecryptPureXORHex(encryptedData, "NXRTH_LOCAL_ACCOUNT_KEY");
     }
@@ -582,7 +581,7 @@ void LoadAccountFromSlot(int instanceId, int slotIndex) {
         return;
     }
 
-    std::string tempRawFile = exeDir + "\\Backups\\Instance_" + std::to_string(instanceId) + "\\temp_decrypted.xml";
+    std::string tempRawFile = folderPath + "\\temp_decrypted.xml";
     std::ofstream outFile(tempRawFile, std::ios::binary);
     outFile << rawData;
     outFile.close();
@@ -593,7 +592,7 @@ void LoadAccountFromSlot(int instanceId, int slotIndex) {
     std::string pushCmd = "push \"" + tempRawFile + "\" " + tempSdFile;
     RunAdbCommand(instanceId, pushCmd);
 
-// RENAME THE ACTUAL FILE TO STORAGE_NEW.XML
+    // RENAME THE ACTUAL FILE TO STORAGE_NEW.XML
     std::string moveCmd = "shell \"su -c 'cat " + tempSdFile + " > /data/data/com.supercell.hayday/shared_prefs/storage_new.xml'\"";
     RunAdbCommand(instanceId, moveCmd);
     RunAdbCommand(instanceId, "shell \"su -c 'chmod 777 /data/data/com.supercell.hayday/shared_prefs/storage_new.xml'\"");
@@ -1539,8 +1538,16 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
         if (!productRes.found) {
             AddLog(instanceId, Tr("No crops to sell."), ImVec4(1, 0.5f, 0, 1));
             MatchResult crossRes = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold);
-            if (crossRes.found) AdbTap(instanceId, crossRes.x, crossRes.y);
-            break;
+            if (crossRes.found) {
+                AdbTap(instanceId, crossRes.x, crossRes.y);
+                SmartSleep(700); 
+                MatchResult crossRes = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold);
+                if (crossRes.found) {
+                    AdbTap(instanceId, crossRes.x, crossRes.y);
+					SmartSleep(700);
+                }
+            }
+            break; 
         }
 
         AdbTap(instanceId, productRes.x, productRes.y);
@@ -1601,31 +1608,33 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
 			AdbTap(instanceId, 464, 384); // COORDINATES JUST IN CASE.    
         }
     }
-
+	SmartSleep(1000);
     cv::Mat finalScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
     MatchResult crossRes = FindImage(finalScreen, cross_templatePath, g_Thresholds.crossThreshold);
     if (crossRes.found) AdbTap(instanceId, crossRes.x, crossRes.y);
+	if (!crossRes.found) AddLog(instanceId, "Could not find second cross button, using x,y coordinates.", ImVec4(1, 0, 0, 1));
+	AdbTap(instanceId, 480, 130); //tap cross in shop menu (not seed menu) to exit shop completely.
 }
 // MAIN BOT FUNCTION. THIS FUNCTION RUNS THE ENTIRE BOT LOGIC FOR ONE INSTANCE IN A LOOP UNTIL THE BOT IS STOPPED.
 void RunPremiumBot(int instanceId) {
     BotInstance& bot = g_Bots[instanceId];
     // --- MEMUC STRICT INSPECTOR ---
-    AddLog(instanceId, "[INSPECTOR] Checking MEmu engine configuration...");
+    //AddLog(instanceId, "[INSPECTOR] Checking MEmu engine configuration...");
 
-    std::string width = GetMEmuConfig(instanceId, "resolution_width");
-    std::string height = GetMEmuConfig(instanceId, "resolution_height");
-    std::string dpi = GetMEmuConfig(instanceId, "vbox_dpi");
+    //std::string width = GetMEmuConfig(instanceId, "resolution_width");
+    //std::string height = GetMEmuConfig(instanceId, "resolution_height");
+    //std::string dpi = GetMEmuConfig(instanceId, "vbox_dpi");
 
 	// STOP THE BOT IF THE RESOLUTION OR DPI SETTINGS ARE NOT CORRECT TO AVOID UNEXPECTED BEHAVIOR AND FALSE DETECTIONS.
-    if (width != "640" || height != "480" || dpi != "100") {
-        AddLog(instanceId, "[FATAL ERROR] Emulator Settings are WRONG!");
-        AddLog(instanceId, ("-> Current: " + width + "x" + height + " | DPI: " + dpi).c_str());
-        AddLog(instanceId, "-> REQUIRED: 640x480 | DPI: 100");
-        AddLog(instanceId, "Please change settings in MEmu, restart emulator and try again.");
-        bot.isRunning = false;
-        return;
-    }
-    AddLog(instanceId, "[INSPECTOR] Settings verified (640x480 | 100 DPI)."); 
+    //if (width != "640" || height != "480" || dpi != "100") {
+        //AddLog(instanceId, "[FATAL ERROR] Emulator Settings are WRONG!");
+        //AddLog(instanceId, ("-> Current: " + width + "x" + height + " | DPI: " + dpi).c_str());
+        //AddLog(instanceId, "-> REQUIRED: 640x480 | DPI: 100");
+        //AddLog(instanceId, "Please change settings in MEmu, restart emulator and try again.");
+       // bot.isRunning = false;
+      //  return;
+    //}
+    //AddLog(instanceId, "[INSPECTOR] Settings verified (640x480 | 100 DPI)."); 
     AddLog(instanceId, Tr("Bot Started."), ImVec4(0, 1, 0, 1));
     if (strcmp(bot.inputDevice, "/dev/input/event1") == 0) {
         if (AutoDetectTouchDevice(instanceId)) {
