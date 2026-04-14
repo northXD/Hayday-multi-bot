@@ -50,6 +50,7 @@ extern std::string grown_carrot_templatePath; extern std::string carrot_shop_tem
 extern std::string grown_soybean_templatePath; extern std::string soybean_shop_templatePath; extern std::string sugarcane_templatePath;
 extern std::string grown_sugarcane_templatePath; extern std::string sugarcane_shop_templatePath; extern std::string silo_full_templatePath;
 extern std::string crate_carrot_templatePath; extern std::string crate_soybean_templatePath; extern std::string crate_sugarcane_templatePath;
+extern std::string silo_full_cross_templatePath; extern std::string market_close_crosstemplatePath; extern std::string market_close_crosstemplatePath;
 
 
 // --- MUTUAL FUNCTIONS ---
@@ -654,7 +655,7 @@ bool AutoDetectTouchDevice(int instanceId) {
 void ExecuteDenseGridGesture(int instanceId, int startX, int startY, const std::vector<MatchResult>& fields) {
     if (fields.empty()) return;
 
-    AddLog(instanceId, "[INFO] Executing 2-Finger Smart Sweep (Tuned Speed & Safe Release)...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+    AddLog(instanceId, "[INFO] Executing Sweep...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
 
     // 1. FIND FIELD'S BORDER SO THE BOT CAN DRAG IT TO THE CORNER OF THE FIELDS.
     int minX = 99999, maxX = 0, minY = 99999, maxY = 0;
@@ -1610,9 +1611,8 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
     }
 	SmartSleep(1000);
     cv::Mat finalScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
-    MatchResult crossRes = FindImage(finalScreen, cross_templatePath, g_Thresholds.crossThreshold);
+    MatchResult crossRes = FindImage(finalScreen, market_close_crosstemplatePath, g_Thresholds.marketCloseCrossThreshold);
     if (crossRes.found) AdbTap(instanceId, crossRes.x, crossRes.y);
-	if (!crossRes.found) AddLog(instanceId, "Could not find second cross button, using x,y coordinates.", ImVec4(1, 0, 0, 1));
 	AdbTap(instanceId, 480, 130); //tap cross in shop menu (not seed menu) to exit shop completely.
 }
 // MAIN BOT FUNCTION. THIS FUNCTION RUNS THE ENTIRE BOT LOGIC FOR ONE INSTANCE IN A LOOP UNTIL THE BOT IS STOPPED.
@@ -1892,7 +1892,7 @@ void RunPremiumBot(int instanceId) {
                     MatchResult siloFullRes = FindImage(siloScreen, "templates\\silo_full.png", 0.75f, false);
                     if (siloFullRes.found) {
                         AddLog(instanceId, Tr("SILO FULL DETECTED! Harvest interrupted."), ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
-                        MatchResult crossRes = FindImage(siloScreen, cross_templatePath, g_Thresholds.crossThreshold, false);
+                        MatchResult crossRes = FindImage(siloScreen, silo_full_cross_templatePath, g_Thresholds.siloFullCrossThreshold, false);
                         if (crossRes.found) AdbTap(instanceId, crossRes.x, crossRes.y);
                         else AdbTap(instanceId, siloFullRes.x, siloFullRes.y);
                         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
