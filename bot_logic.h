@@ -113,6 +113,8 @@ struct TemplateThresholds {
     float grownSoybeanThreshold = 0.70f;
     float sugarcaneThreshold = 0.75f;
     float grownSugarcaneThreshold = 0.70f;
+	float marketCloseCrossThreshold = 0.70f;
+	float siloFullCrossThreshold = 0.70f;
 };
 
 struct IntervalSettings {
