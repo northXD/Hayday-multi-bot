@@ -164,6 +164,8 @@ std::string sugarcane_templatePath = "templates\\sugarcane.png";
 std::string grown_sugarcane_templatePath = "templates\\grown_sugarcane.png";
 std::string sugarcane_shop_templatePath = "templates\\sugarcane_shop.png";
 std::string silo_full_templatePath = "templates\\silo_full.png";
+std::string silo_full_cross_templatePath = "templates\\silo_full_cross.png";
+std::string market_close_crosstemplatePath = "templates\\market_close_cross.png";
 
 // Buffers
 char g_fieldPathBuf[260] = "templates\\field.png";
@@ -201,7 +203,8 @@ char g_sugarcanePathBuf[260] = "templates\\sugarcane.png";
 char g_grownSugarcanePathBuf[260] = "templates\\grown_sugarcane.png";
 char g_sugarcaneShopPathBuf[260] = "templates\\sugarcane_shop.png";
 char g_siloFullPathBuf[260] = "templates\\silo_full.png";
-
+char g_siloFullCrossPathBuf[260] = "templates\\silo_full_cross.png";
+char g_marketCloseCrossPathBuf[260] = "templates\\market_close_cross.png";
 
 IntervalSettings g_Intervals;
 
