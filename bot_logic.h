@@ -12,6 +12,7 @@
 // --- PREMIUM GUI'DEN TAŞINAN BOT YAPILARI ---
 
 struct InventoryData {
+    int wheat = 0;
     int bolt = 0, tape = 0, plank = 0;
     int nail = 0, screw = 0, panel = 0;
     int deed = 0, mallet = 0, marker = 0, map = 0;
@@ -44,8 +45,10 @@ struct AccountSlot {
     long long nextTomTime = 0;  // Bir sonraki uyanış (Saniye)
     int tomCategory = 0;        // 0 = Barn, 1 = Silo
     std::string tomItemName = "";
-    int targetCyclesBeforeSale = 0;
+    int targetCyclesBeforeSale = 1;
     int currentCyclesWithoutSale = 0;
+    bool sellAtMaxPrice = true;
+    int keepWheatReserve = 0;
     bool isFriendWithStorage = false; // Depo ile arkadaş mı?
     bool isShopFullStuck = false; // Dükkan tıkandı mı?
     std::chrono::steady_clock::time_point lastShopCheckTime;

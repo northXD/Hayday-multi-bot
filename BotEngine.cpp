@@ -1022,11 +1022,12 @@ void SendRotationReport(int instanceId) {
 }
 
 // sales cycle function.
-void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
+void RunSalesCycle(int instanceId, int accountIndex, bool isEmergency) {
     BotInstance& bot = g_Bots[instanceId];
-    AddLog(instanceId, Tr("Entering Sales Mode..."), ImVec4(0, 1, 1, 1));
 
+    AddLog(instanceId, Tr("Entering Sales Mode..."), ImVec4(0, 1, 1, 1));
     bot.accounts[accountIndex].salesCycleCount++;
+    // ... rest of the function ...
 
     auto SmartSleep = [&](int ms) {
         int elapsed = 0;
@@ -1551,22 +1552,49 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
             break; 
         }
 
+        int plusClicks = 6;
+
         AdbTap(instanceId, productRes.x, productRes.y);
         if (!SmartSleep(g_Intervals.productSelectWait)) return;
 
         screen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
 
+        if (bot.testCropMode == 0 && bot.accounts[accountIndex].keepWheatReserve > 0) {
+            int currentWheatCount = ReadItemCountByAnchor(screen, "templates\wheat.png");
+            if (currentWheatCount > 0) {
+                int sellableWheat = currentWheatCount - bot.accounts[accountIndex].keepWheatReserve;
+                if (sellableWheat <= 0) {
+                    AddLog(instanceId, "Keep Wheat active: keeping " + std::to_string(bot.accounts[accountIndex].keepWheatReserve) + " wheat in silo. Skipping wheat sale.", ImVec4(1.0f, 1.0f, 0.2f, 1.0f));
+                    MatchResult closeRes = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold);
+                    if (closeRes.found) {
+                        AdbTap(instanceId, closeRes.x, closeRes.y);
+                        if (!SmartSleep(500)) return;
+                    }
+                    break;
+                }
 
-        for (int a = 0; a < 6; a++) {
+                int desiredStack = std::min(10, sellableWheat);
+                plusClicks = std::max(0, desiredStack - 1);
+                AddLog(instanceId, "Keep Wheat active: current=" + std::to_string(currentWheatCount) + ", reserve=" + std::to_string(bot.accounts[accountIndex].keepWheatReserve) + ", sellable=" + std::to_string(sellableWheat) + ", listing " + std::to_string(desiredStack) + ".", ImVec4(0.8f, 0.9f, 0.4f, 1.0f));
+            }
+            else {
+                AddLog(instanceId, "Keep Wheat active, but wheat count OCR failed on sale screen. Using default stack size.", ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
+            }
+        }
+
+        for (int a = 0; a < plusClicks; a++) {
 			AdbTap(instanceId, 524, 161); // Plus
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
 
-		// MAX PRICE BUTTON (ARROWS TO BE EXACT)
-        AdbTap(instanceId, 491, 247);
+		// MAX PRICE BUTTON
+        if (bot.accounts[accountIndex].sellAtMaxPrice) {
+            AdbTap(instanceId, 487, 248);
+            if (!SmartSleep(120)) return;
+        }
 
         // Randomizer (Anti-Ban PRICE DROPPER) 
-        if (g_Bots[instanceId].enableShopRandomizer) {
+        if (!bot.accounts[accountIndex].sellAtMaxPrice && g_Bots[instanceId].enableShopRandomizer) {
             int randomClicks = rand() % (g_Bots[instanceId].shopRandomizerMax + 1);
             if (randomClicks > 0) {
                 AddLog(instanceId, std::string(Tr("Anti-Ban: Decreasing price ")) + std::to_string(randomClicks) + Tr(" times."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
@@ -2269,35 +2297,60 @@ void RunPremiumBot(int instanceId) {
                 }
             }
 
+            if (!plantDone && !outOfSeeds) {
+                AddLog(instanceId, "Planting did not complete. Staying on same account for another pass.", ImVec4(1.0f, 0.5f, 0.0f, 1.0f));
+                std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                continue;
+            }
+
             bot.accounts[i].lastPlantTime = std::chrono::steady_clock::now();
             bot.accounts[i].isFirstRun = false;
 
             // =========================================================================
-            // FİNAL SELL, WE HAVE TO SELL BECAUSE WE ARE HARVESTING AGAIN.
+            // FINAL SELL
             // =========================================================================
+            AccountSlot& currentAccount = bot.accounts[i];
+            currentAccount.currentCyclesWithoutSale++;
+
+            bool shouldSellThisCycle = false;
             if (bot.enableRandomSaleCycle) {
-                if (bot.accounts[i].targetCyclesBeforeSale <= 0) {
-                    bot.accounts[i].targetCyclesBeforeSale = (rand() % 3) + 1;
+                if (currentAccount.targetCyclesBeforeSale <= 0) {
+                    currentAccount.targetCyclesBeforeSale = (rand() % 3) + 1;
                 }
 
-                bot.accounts[i].currentCyclesWithoutSale++;
+                shouldSellThisCycle = currentAccount.currentCyclesWithoutSale >= currentAccount.targetCyclesBeforeSale;
 
-                if (bot.accounts[i].currentCyclesWithoutSale >= bot.accounts[i].targetCyclesBeforeSale) {
-                    AddLog(instanceId, std::string(Tr("Random Sales Triggered! (")) + std::to_string(bot.accounts[i].currentCyclesWithoutSale) + "/" + std::to_string(bot.accounts[i].targetCyclesBeforeSale) + ")", ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
-                    bot.statusText = Tr("Checking Sales...");
-                    RunSalesCycle(instanceId, i, false);
-
-                    bot.accounts[i].currentCyclesWithoutSale = 0;
-                    bot.accounts[i].targetCyclesBeforeSale = (rand() % 3) + 1;
+                if (shouldSellThisCycle) {
+                    AddLog(instanceId, std::string(Tr("Random Sales Triggered! (")) + std::to_string(currentAccount.currentCyclesWithoutSale) + "/" + std::to_string(currentAccount.targetCyclesBeforeSale) + ")", ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
                 }
                 else {
-                    AddLog(instanceId, std::string(Tr("Skipping Sales to mimic human behavior... (")) + std::to_string(bot.accounts[i].currentCyclesWithoutSale) + "/" + std::to_string(bot.accounts[i].targetCyclesBeforeSale) + ")", ImVec4(0.5f, 0.7f, 0.5f, 1.0f));
+                    AddLog(instanceId, std::string(Tr("Skipping Sales to mimic human behavior... (")) + std::to_string(currentAccount.currentCyclesWithoutSale) + "/" + std::to_string(currentAccount.targetCyclesBeforeSale) + ")", ImVec4(0.5f, 0.7f, 0.5f, 1.0f));
                     bot.statusText = Tr("Skipped Sales (Random)");
                 }
             }
             else {
+                if (currentAccount.targetCyclesBeforeSale <= 0) {
+                    currentAccount.targetCyclesBeforeSale = 1;
+                }
+
+                shouldSellThisCycle = currentAccount.currentCyclesWithoutSale >= currentAccount.targetCyclesBeforeSale;
+
+                if (shouldSellThisCycle) {
+                    AddLog(instanceId, std::string("Sales triggered by X-cycle gate! (") + std::to_string(currentAccount.currentCyclesWithoutSale) + "/" + std::to_string(currentAccount.targetCyclesBeforeSale) + ")", ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
+                }
+                else {
+                    AddLog(instanceId, std::string("Skipping sales due to X-cycle gate... (") + std::to_string(currentAccount.currentCyclesWithoutSale) + "/" + std::to_string(currentAccount.targetCyclesBeforeSale) + ")", ImVec4(0.5f, 0.7f, 0.5f, 1.0f));
+                    bot.statusText = "Skipped Sales (X-Cycle)";
+                }
+            }
+
+            if (shouldSellThisCycle) {
                 bot.statusText = Tr("Checking Sales...");
                 RunSalesCycle(instanceId, i, false);
+                currentAccount.currentCyclesWithoutSale = 0;
+                if (bot.enableRandomSaleCycle) {
+                    currentAccount.targetCyclesBeforeSale = (rand() % 3) + 1;
+                }
             }
 
             AddLog(instanceId, Tr("Account Cycle Done. Moving to next..."), ImVec4(0.5f, 0.5f, 0.5f, 1));

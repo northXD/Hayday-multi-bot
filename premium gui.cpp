@@ -356,6 +356,10 @@ void SaveConfig() {
                 out << accPfx << "Name=" << acc.farmName << "\n";
                 out << accPfx << "Coin=" << acc.coinAmount << "\n";
                 out << accPfx << "Dia=" << acc.diamondAmount << "\n";
+                out << accPfx << "SellCycles=" << acc.targetCyclesBeforeSale << "\n";
+                out << accPfx << "SellCounter=" << acc.currentCyclesWithoutSale << "\n";
+                out << accPfx << "SellMax=" << (acc.sellAtMaxPrice ? "1" : "0") << "\n";
+                out << accPfx << "KeepWheat=" << acc.keepWheatReserve << "\n";
                 
             
             }
@@ -442,6 +446,10 @@ void LoadConfig() {
                                 else if (subKey == "Name") acc.farmName = val;
                                 else if (subKey == "Coin") acc.coinAmount = std::stoi(val);
                                 else if (subKey == "Dia") acc.diamondAmount = std::stoi(val);
+                                else if (subKey == "SellCycles") acc.targetCyclesBeforeSale = std::max(1, std::stoi(val));
+                                else if (subKey == "SellCounter") acc.currentCyclesWithoutSale = std::max(0, std::stoi(val));
+                                else if (subKey == "SellMax") acc.sellAtMaxPrice = (val == "1");
+                                else if (subKey == "KeepWheat") acc.keepWheatReserve = std::max(0, std::stoi(val));
                                 else if (subKey == "Friend") acc.isFriendWithStorage = (val == "1");
                             }
                             catch (...) {} 
@@ -1424,7 +1432,28 @@ void RenderApp() {
 
                                     ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
-                                    
+                                    ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), "SALE RULES");
+                                    int sellCycles = std::max(1, currAcc.targetCyclesBeforeSale);
+                                    ImGui::PushItemWidth(160.0f);
+                                    if (ImGui::InputInt("Sell after X cycles##sellcycles", &sellCycles)) {
+                                        currAcc.targetCyclesBeforeSale = std::max(1, sellCycles);
+                                        SaveConfig();
+                                    }
+                                    ImGui::PopItemWidth();
+                                    if (ImGui::Checkbox("Sell at max price##sellmax", &currAcc.sellAtMaxPrice)) {
+                                        SaveConfig();
+                                    }
+                                    int keepWheat = std::max(0, currAcc.keepWheatReserve);
+                                    ImGui::PushItemWidth(160.0f);
+                                    if (ImGui::InputInt("Keep Wheat##keepwheat", &keepWheat)) {
+                                        currAcc.keepWheatReserve = std::max(0, keepWheat);
+                                        SaveConfig();
+                                    }
+                                    ImGui::PopItemWidth();
+                                    ImGui::TextDisabled("X=1 means sell every cycle. Keep Wheat only affects wheat sales.");
+
+                                    ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+
                                     if (currAcc.hasFile) {
                                         ImGui::Columns(3, "AccDetailsCols", false);
 
