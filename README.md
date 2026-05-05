@@ -27,7 +27,8 @@ To use this bot, you need up-to-date /injecthacks/ folder(Because you need new i
 ## ⚙️ How to Use
 1. Download the latest release .zip file and drag it to your desktop.
 2. Right-click the .zip file and extract it to a folder.
-3. Run premium.exe.
+3. Run nxrth bot.exe
+4. For setup, go to (nxrth.app/setup)[nxrth.app/setup]
 
 ## 🛠️ Required Emulator Settings
 * **Display:** You have to set your emulator display settings to 640x480 resolution with 100 DPI. 
