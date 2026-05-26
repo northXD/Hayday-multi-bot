@@ -11,7 +11,7 @@
 5. Visit setup page: [nxrth.app/setup](https://nxrth.app/setup)
 
 ## Join my Discord server if you have issues
-Visit setup page: [discord.gg/nxrth](discord.gg/nxrth)
+[discord.gg/nxrth](discord.gg/nxrth)
 
 ## 🛑 Important Notes
 
