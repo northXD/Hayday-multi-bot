@@ -12,6 +12,7 @@
 
 ## Join my Discord server if you have issues
 [discord.gg/nxrth](https://discord.gg/nxrth)
+[discord.gg/6eU847bFMX](https://discord.gg/6eU847bFMX)
 
 ## 🛑 Important Notes
 
