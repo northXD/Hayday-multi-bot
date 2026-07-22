@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <deque>  // dinamik (sınırsız) instance listesi için
 #include <chrono> // Zaman ayarları için eklendi
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui.hpp>
@@ -113,6 +114,8 @@ struct TemplateThresholds {
     float grownSoybeanThreshold = 0.70f;
     float sugarcaneThreshold = 0.75f;
     float grownSugarcaneThreshold = 0.70f;
+	float marketCloseCrossThreshold = 0.70f;
+	float siloFullCrossThreshold = 0.70f;
 };
 
 struct IntervalSettings {
@@ -131,7 +134,11 @@ struct IntervalSettings {
 
 
 
-extern BotInstance g_Bots[6];
+// Instance sayısı artık sabit değil; kullanıcı GUI'den istediği kadar seçebilir.
+// std::deque kullanıyoruz çünkü sona eleman eklerken mevcut elemanlara olan
+// referanslar/pointerlar geçerli kalır (çalışan thread'ler g_Bots[i]'yi tutuyor).
+extern std::deque<BotInstance> g_Bots;
+constexpr int kMaxInstanceCount = 100; // güvenlik tavanı (bellek kazası olmasın diye)
 
 
 struct MatchResult {

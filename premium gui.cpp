@@ -164,6 +164,8 @@ std::string sugarcane_templatePath = "templates\\sugarcane.png";
 std::string grown_sugarcane_templatePath = "templates\\grown_sugarcane.png";
 std::string sugarcane_shop_templatePath = "templates\\sugarcane_shop.png";
 std::string silo_full_templatePath = "templates\\silo_full.png";
+std::string silo_full_cross_templatePath = "templates\\silo_full_cross.png";
+std::string market_close_crosstemplatePath = "templates\\market_close_cross.png";
 
 // Buffers
 char g_fieldPathBuf[260] = "templates\\field.png";
@@ -201,7 +203,8 @@ char g_sugarcanePathBuf[260] = "templates\\sugarcane.png";
 char g_grownSugarcanePathBuf[260] = "templates\\grown_sugarcane.png";
 char g_sugarcaneShopPathBuf[260] = "templates\\sugarcane_shop.png";
 char g_siloFullPathBuf[260] = "templates\\silo_full.png";
-
+char g_siloFullCrossPathBuf[260] = "templates\\silo_full_cross.png";
+char g_marketCloseCrossPathBuf[260] = "templates\\market_close_cross.png";
 
 IntervalSettings g_Intervals;
 
@@ -269,7 +272,87 @@ void AddLog(int instanceId, std::string message, ImVec4 color = ImVec4(0.8f, 0.8
     if (g_GlobalLogs.size() > 1000) g_GlobalLogs.erase(g_GlobalLogs.begin());
 }
 
-BotInstance g_Bots[6];
+// Dinamik instance listesi. Kullanıcı GUI'den istediği kadar instance seçebilir.
+// std::deque: sona eklerken mevcut elemanlara olan referanslar geçerli kalır,
+// böylece çalışan bot thread'leri g_Bots[i]'yi güvenle tutmaya devam eder.
+std::deque<BotInstance> g_Bots;
+int g_InstanceCount = 6; // kullanıcının seçtiği instance sayısı (config'e kaydedilir)
+
+// g_Bots'u en az (idx+1) elemana kadar büyütür.
+void EnsureInstanceCapacity(int idx) {
+    while ((int)g_Bots.size() <= idx) {
+        g_Bots.emplace_back();
+        g_Bots.back().id = (int)g_Bots.size() - 1;
+    }
+}
+
+// Tek bir instance'ın varsayılan ayarlarını (port, vm adı, hesap yedekleri) doldurur.
+void InitInstanceDefaults(int i) {
+    g_Bots[i].id = i;
+    g_Bots[i].emulatorType = g_GlobalEmulatorMode;
+    g_Bots[i].emuIndex = i;
+
+    // PORTLAR EMÜLATÖR SEÇİMİNE GÖRE DEĞİŞİR.
+    if (g_GlobalEmulatorMode == 1) { // LDPlayer
+        std::string defaultPort = "127.0.0.1:" + std::to_string(5555 + (i * 2));
+        strcpy(g_Bots[i].adbSerial, defaultPort.c_str());
+        std::string defaultVM = "LDPlayer-" + std::to_string(i);
+        strcpy(g_Bots[i].vmName, defaultVM.c_str());
+    }
+    else { // MEmu
+        std::string defaultPort = "127.0.0.1:" + std::to_string(21503 + (i * 10));
+        strcpy(g_Bots[i].adbSerial, defaultPort.c_str());
+        std::string defaultVM = (i == 0) ? "MEmu" : "MEmu_" + std::to_string(i);
+        strcpy(g_Bots[i].vmName, defaultVM.c_str());
+    }
+
+    // Bu instance'ın yedek klasörünü garanti et (6'dan fazla instance için gerekli).
+    std::error_code ec;
+    fs::create_directories(GetAppDataPath() + "\\Backups\\Instance_" + std::to_string(i), ec);
+
+    for (int j = 0; j < 15; j++) {
+        if (g_Bots[i].accounts[j].name.empty()) {
+            g_Bots[i].accounts[j].name = "Account " + std::to_string(j + 1);
+        }
+        std::string path = GetAppDataPath() + "\\Backups\\Instance_" + std::to_string(i) + "\\account_" + std::to_string(j + 1) + ".nxrth";
+        if (fs::exists(path) && fs::file_size(path) > 0) {
+            g_Bots[i].accounts[j].hasFile = true;
+            g_Bots[i].accounts[j].fileName = path;
+        }
+    }
+}
+
+// Instance sayısını kullanıcının istediği değere büyütür/küçültür.
+// Çalışan bir instance ASLA silinmez (thread hâlâ ona erişiyor olabilir).
+void ApplyInstanceCount(int n) {
+    if (n < 1) n = 1;
+    if (n > kMaxInstanceCount) n = kMaxInstanceCount;
+
+    while ((int)g_Bots.size() < n) {
+        int idx = (int)g_Bots.size();
+        g_Bots.emplace_back();
+        InitInstanceDefaults(idx);
+    }
+    while ((int)g_Bots.size() > n) {
+        if (g_Bots.back().isRunning) break; // çalışan instance'ı silme
+        g_Bots.pop_back();
+    }
+    g_InstanceCount = (int)g_Bots.size();
+}
+
+// Combo kutuları için mevcut instance sayısına göre "Instance 1..N" listesi üretir.
+// Dönen pointer bir sonraki çağrıya kadar geçerlidir; her combo'da hemen kullanılmalı.
+const char** GetInstanceItems(int* outCount) {
+    static std::vector<std::string> names;
+    static std::vector<const char*> ptrs;
+    names.clear();
+    ptrs.clear();
+    for (int i = 0; i < (int)g_Bots.size(); i++)
+        names.push_back(std::string(Tr("Instance ")) + std::to_string(i + 1));
+    for (auto& s : names) ptrs.push_back(s.c_str());
+    if (outCount) *outCount = (int)ptrs.size();
+    return ptrs.data();
+}
 
 // --- Variables ---
 
@@ -332,10 +415,11 @@ void SaveConfig() {
         out << "TransferThreshold=" << g_TransferThreshold << "\n";
         out << "StorageTag=" << g_StorageTagBuf << "\n";
         out << "GlobalEmuMode=" << g_GlobalEmulatorMode << "\n";
-        for (int i = 0; i < 6; i++) {
+        out << "InstanceCount=" << (int)g_Bots.size() << "\n";
+        for (int i = 0; i < (int)g_Bots.size(); i++) {
             out << "Inst_" << i << "_Touch=" << g_Bots[i].inputDevice << "\n";
         }
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < (int)g_Bots.size(); i++) {
             for (int j = 0; j < 15; j++) {
                 AccountSlot& acc = g_Bots[i].accounts[j];
                 std::string pfx = "Tom_" + std::to_string(i) + "_" + std::to_string(j) + "_";
@@ -392,6 +476,12 @@ void LoadConfig() {
                 else if (key == "NextAccountWait") g_Intervals.nextAccountWait = std::stoi(val);
                 
                 else if (key == "GlobalEmuMode") g_GlobalEmulatorMode = std::stoi(val);
+                else if (key == "InstanceCount") {
+                    g_InstanceCount = std::stoi(val);
+                    if (g_InstanceCount < 1) g_InstanceCount = 1;
+                    if (g_InstanceCount > kMaxInstanceCount) g_InstanceCount = kMaxInstanceCount;
+                    EnsureInstanceCapacity(g_InstanceCount - 1);
+                }
                 else if (key == "CoinCollectWait") g_Intervals.coinCollectWait = std::stoi(val);
                 else if (key == "ProductSelectWait") g_Intervals.productSelectWait = std::stoi(val);
                 else if (key == "CreateSaleWait") g_Intervals.createSaleWait = std::stoi(val);
@@ -402,10 +492,14 @@ void LoadConfig() {
                     g_StorageTag = val; 
                 }
                 else if (key.rfind("Inst_", 0) == 0) {
-                    int i = key[5] - '0';
-                    std::string subKey = key.substr(7);
-                    if (i >= 0 && i < 6) {
-                        if (subKey == "Touch") strncpy(g_Bots[i].inputDevice, val.c_str(), 64);
+                    int i; char subKeyBuf[64];
+                    // Not: %d ile parse ediyoruz ki 10+ indexler de doğru okunsun.
+                    if (sscanf(key.c_str(), "Inst_%d_%63s", &i, subKeyBuf) == 2) {
+                        if (i >= 0 && i < kMaxInstanceCount) {
+                            EnsureInstanceCapacity(i);
+                            std::string subKey(subKeyBuf);
+                            if (subKey == "Touch") strncpy(g_Bots[i].inputDevice, val.c_str(), 64);
+                        }
                     }
                 }
                else if (key.rfind("Tom_", 0) == 0) { // If starts with tom
@@ -413,7 +507,8 @@ void LoadConfig() {
                     char subKeyBuf[64];
                     
                     if (sscanf(key.c_str(), "Tom_%d_%d_%s", &i, &j, subKeyBuf) == 3) {
-                        if (i >= 0 && i < 6 && j >= 0 && j < 15) {
+                        if (i >= 0 && i < kMaxInstanceCount && j >= 0 && j < 15) {
+                            EnsureInstanceCapacity(i);
                             AccountSlot& acc = g_Bots[i].accounts[j];
                             std::string subKey(subKeyBuf);
                             if (subKey == "En") acc.autoTomEnabled = (val == "1");
@@ -429,7 +524,8 @@ void LoadConfig() {
                     int i, j;
                     char subKeyBuf[64];
                     if (sscanf(key.c_str(), "Acc_%d_%d_%s", &i, &j, subKeyBuf) == 3) {
-                        if (i >= 0 && i < 6 && j >= 0 && j < 15) {
+                        if (i >= 0 && i < kMaxInstanceCount && j >= 0 && j < 15) {
+                            EnsureInstanceCapacity(i);
                             AccountSlot& acc = g_Bots[i].accounts[j];
                             std::string subKey(subKeyBuf);
                             try {
@@ -456,7 +552,7 @@ void SaveInventoryData() {
     std::string path = GetAppDataPath() + "\\nxrth_inventory.ini";
     std::ofstream out(path);
     if (out.is_open()) {
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < (int)g_Bots.size(); i++) {
             for (int j = 0; j < 15; j++) {
                 InventoryData& inv = g_Bots[i].accounts[j].currentInv;
                 out << i << "," << j << "," << inv.bolt << "," << inv.tape << "," << inv.plank << ","
@@ -483,7 +579,7 @@ void LoadInventoryData() {
             }
             if (vals.size() == 12) {
                 int i = vals[0]; int j = vals[1];
-                if (i >= 0 && i < 6 && j >= 0 && j < 15) {
+                if (i >= 0 && i < (int)g_Bots.size() && j >= 0 && j < 15) {
                     InventoryData& inv = g_Bots[i].accounts[j].currentInv;
                     inv.bolt = vals[2]; inv.tape = vals[3]; inv.plank = vals[4];
                     inv.nail = vals[5]; inv.screw = vals[6]; inv.panel = vals[7];
@@ -667,7 +763,7 @@ void RenderCustomTitleBar(GLFWwindow* window) {
             kAdbPath = "C:\\Program Files\\Microvirt\\MEmu\\adb.exe";
             kMEmuConsolePath = "C:\\Program Files\\Microvirt\\MEmu\\MEmuConsole.exe";
 
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < (int)g_Bots.size(); i++) {
                 g_Bots[i].emulatorType = 0;
                 std::string dp = "127.0.0.1:" + std::to_string(21503 + (i * 10));
                 strncpy(g_Bots[i].adbSerial, dp.c_str(), 64);
@@ -683,7 +779,7 @@ void RenderCustomTitleBar(GLFWwindow* window) {
             kAdbPath = "C:\\LDPlayer\\LDPlayer9\\adb.exe";
             kMEmuConsolePath = "C:\\LDPlayer\\LDPlayer9\\ldconsole.exe";
 
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < (int)g_Bots.size(); i++) {
                 g_Bots[i].emulatorType = 1;
                 g_Bots[i].emuIndex = i;
                 std::string dp = "127.0.0.1:" + std::to_string(5555 + (i * 2));
@@ -727,41 +823,18 @@ void RenderCustomTitleBar(GLFWwindow* window) {
 
 
 void InitializeBots() {
+    // LoadConfig() zaten çalıştıysa g_Bots kayıtlı sayıya büyümüş olabilir.
+    // En az istenen sayıda instance olduğundan emin ol.
+    if (g_InstanceCount < 1) g_InstanceCount = 6;
+    if (g_InstanceCount > kMaxInstanceCount) g_InstanceCount = kMaxInstanceCount;
+    EnsureInstanceCapacity(g_InstanceCount - 1);
 
-
-    for (int i = 0; i < 6; i++) {
-        g_Bots[i].id = i;
-        g_Bots[i].emulatorType = g_GlobalEmulatorMode;
-        g_Bots[i].emuIndex = i;
-
-		// PORTS CHANGE BASED ON THE EMULATOR CHOICE, SO WE SET THEM ACCORDINGLY.
-        if (g_GlobalEmulatorMode == 1) { // LDPlayer
-            std::string defaultPort = "127.0.0.1:" + std::to_string(5555 + (i * 2));
-            strcpy(g_Bots[i].adbSerial, defaultPort.c_str());
-            std::string defaultVM = "LDPlayer-" + std::to_string(i);
-            strcpy(g_Bots[i].vmName, defaultVM.c_str());
-        }
-        else { // MEmu
-            std::string defaultPort = "127.0.0.1:" + std::to_string(21503 + (i * 10));
-            strcpy(g_Bots[i].adbSerial, defaultPort.c_str());
-            std::string defaultVM = (i == 0) ? "MEmu" : "MEmu_" + std::to_string(i);
-            strcpy(g_Bots[i].vmName, defaultVM.c_str());
-        }
-
-        for (int j = 0; j < 15; j++) {
-            if (g_Bots[i].accounts[j].name.empty()) {
-                g_Bots[i].accounts[j].name = "Account " + std::to_string(j + 1);
-            }
-
-            std::string path = GetAppDataPath() + "\\Backups\\Instance_" + std::to_string(i) + "\\account_" + std::to_string(j + 1) + ".nxrth";
-
-            if (fs::exists(path) && fs::file_size(path) > 0) {
-                g_Bots[i].accounts[j].hasFile = true;
-                g_Bots[i].accounts[j].fileName = path;
-            }
-        }
+    for (int i = 0; i < (int)g_Bots.size(); i++) {
+        InitInstanceDefaults(i);
     }
-    g_Bots[0].isActive = true;
+    g_InstanceCount = (int)g_Bots.size();
+
+    if (!g_Bots.empty()) g_Bots[0].isActive = true;
 }
 
 bool LoadTextureFromFile(const char* filename, GLuint* out_texture, int* out_width, int* out_height) {
@@ -784,7 +857,7 @@ bool LoadTextureFromFile(const char* filename, GLuint* out_texture, int* out_wid
 // TOTAL RUNTIME OF THE BOT
 std::string GetRuntimeStr() {
     bool anyRunning = false;
-    for (int i = 0; i < 6; i++) if (g_Bots[i].isRunning) anyRunning = true;
+    for (int i = 0; i < (int)g_Bots.size(); i++) if (g_Bots[i].isRunning) anyRunning = true;
     if (!anyRunning) return "00:00:00";
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - g_BotStartTime).count();
@@ -983,8 +1056,9 @@ void RenderApp() {
         if (ImGui::IsItemDeactivatedAfterEdit()) SaveConfig();
 
         ImGui::Spacing();
-        int activeCount = (int)g_Bots[0].isActive + (int)g_Bots[1].isActive + (int)g_Bots[2].isActive + (int)g_Bots[3].isActive;
-        ImGui::TextColored(ImVec4(0, 1, 0, 1), Tr("Active Instances: %d/4"), activeCount);
+        int activeCount = 0;
+        for (int i = 0; i < (int)g_Bots.size(); i++) if (g_Bots[i].isActive) activeCount++;
+        ImGui::TextColored(ImVec4(0, 1, 0, 1), Tr("Active Instances: %d/%d"), activeCount, (int)g_Bots.size());
         ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), Tr("User: %s"), g_Username);
 
     }
@@ -998,7 +1072,7 @@ void RenderApp() {
             ImGui::Separator(); ImGui::Spacing();
 
             int globalHarvests = 0, globalSales = 0, globalCoins = 0, globalDiamonds = 0;
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < (int)g_Bots.size(); i++) {
                 if (g_Bots[i].isActive) {
                     globalHarvests += g_Bots[i].totalHarvest;
                     globalSales += g_Bots[i].totalSales;
@@ -1037,7 +1111,7 @@ void RenderApp() {
             float cardHeight = (availY - ImGui::GetStyle().ItemSpacing.y) / 2.0f;
 
             ImGui::Columns(2, "DashGrid", false);
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < (int)g_Bots.size(); i++) {
                 if (!g_Bots[i].isActive) ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15f, 0.15f, 0.15f, 0.5f));
                 else ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.14f, 0.12f, 1.0f));
 
@@ -1095,19 +1169,70 @@ void RenderApp() {
         if (g_CurrentTab == 1) {
             ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), Tr("BOT INSTANCE MANAGER"));
             ImGui::Separator();
-            if (ImGui::BeginTabBar("InstanceTabs")) {
-                for (int i = 0; i < 6; i++) {
-                    std::string tabName = std::string(Tr("Instance #")) + std::to_string(i + 1);
 
-                   
-                    ImGuiTabItemFlags tabFlags = 0;
-                    if (g_TargetTabToSelect == i) {
-                        tabFlags |= ImGuiTabItemFlags_SetSelected;
-                        g_TargetTabToSelect = -1; 
+            // --- INSTANCE SAYISI SEÇİMİ (kullanıcı istediği kadar instance açabilir) ---
+            {
+                bool anyRunning = false;
+                for (int r = 0; r < (int)g_Bots.size(); r++)
+                    if (g_Bots[r].isRunning || g_Bots[r].isCreatingEmulator) anyRunning = true;
+
+                // Yalnızca "Set" butonuna basınca uygulanır. Böylece "20" yazarken
+                // araya giren "2" değeri instance'ları silip config'i bozmaz.
+                static int pendingCount = 0;
+                static bool pendingInit = false;
+                if (!pendingInit) { pendingCount = g_InstanceCount; pendingInit = true; }
+
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text(Tr("Number of Instances:"));
+                ImGui::SameLine();
+
+                if (anyRunning) ImGui::BeginDisabled(); // çalışırken değiştirme (thread güvenliği)
+                ImGui::SetNextItemWidth(120);
+                ImGui::InputInt("##InstanceCount", &pendingCount, 1, 5);
+                if (pendingCount < 1) pendingCount = 1;
+                if (pendingCount > kMaxInstanceCount) pendingCount = kMaxInstanceCount;
+                ImGui::SameLine();
+                if (ImGui::Button(Tr("Set"), ImVec2(70, 0))) {
+                    ApplyInstanceCount(pendingCount);
+                    pendingCount = g_InstanceCount; // clamp/guard sonrası gerçek değere eşitle
+                    SaveConfig();
+                }
+                if (anyRunning) ImGui::EndDisabled();
+
+                ImGui::SameLine();
+                if (anyRunning)
+                    ImGui::TextDisabled(Tr("(Stop all bots to change instance count)"));
+                else
+                    ImGui::TextDisabled(Tr("(1 instance = 1 emulator, max %d)"), kMaxInstanceCount);
+            }
+            ImGui::Separator();
+
+            if (ImGui::BeginTabBar("InstanceTabs")) {
+                // Tüm instance'lar için TEK sekme + açılır liste ile seçim.
+                // Böylece 10+ instance'ta sekme oklarıyla uğraşmak yerine
+                // doğrudan dropdown'dan istediğin instance'a atlarsın.
+                if (ImGui::BeginTabItem(Tr("Instance Settings"))) {
+                    int selCount = 0;
+                    const char** selItems = GetInstanceItems(&selCount);
+                    if (g_SelectedInstanceUI < 0 || g_SelectedInstanceUI >= selCount) g_SelectedInstanceUI = 0;
+                    // Başka yerden "bu instance'a git" isteği geldiyse (g_TargetTabToSelect) uygula.
+                    if (g_TargetTabToSelect >= 0 && g_TargetTabToSelect < selCount) {
+                        g_SelectedInstanceUI = g_TargetTabToSelect;
+                        g_TargetTabToSelect = -1;
                     }
 
-                    if (ImGui::BeginTabItem(tabName.c_str(), nullptr, tabFlags)) {
-                        g_SelectedInstanceUI = i;
+                    ImGui::Spacing();
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), Tr("Instance:"));
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(240);
+                    ImGui::Combo("##InstanceSelect", &g_SelectedInstanceUI, selItems, selCount);
+                    ImGui::SameLine();
+                    ImGui::TextDisabled(Tr("(pick an instance to configure)"));
+                    ImGui::Separator();
+
+                    int i = g_SelectedInstanceUI;
+                    {
                         ImGui::Spacing();
                         ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), Tr("CONNECTION SETTINGS"));
                         ImGui::Checkbox(Tr("Enable This Instance"), &g_Bots[i].isActive);
@@ -1244,7 +1369,7 @@ void RenderApp() {
                             ImGui::Columns(2, "ToolsAndActions", false);
 
                             
-                            if (i != 5) { 
+                            { // Artık her instance normal bir farm instance'ı (storage modu kaldırıldı)
                                 ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), Tr("TOOLS & DIAGNOSTICS"));
                                 ImGui::Spacing();
                                 ImGui::Text(Tr("Select Mode:")); ImGui::SameLine();
@@ -1272,28 +1397,8 @@ void RenderApp() {
                                 }
                                 ImGui::PopStyleColor();
                             }
-                            else { // SPECIAL SETTINGS FOR 6TH INSTANCE (STORAGE ACCOUNT (AUTO ITEM TRANSFER STUFF....))
-                                ImGui::TextColored(ImVec4(0.8f, 0.4f, 1.0f, 1.0f), Tr("STORAGE & TRANSFER MODULE"));
-                                ImGui::TextDisabled(Tr("This instance acts as the main warehouse."));
-                                ImGui::Spacing();
+                            // (Storage & Transfer modülü kaldırıldı.)
 
-                                // STORAGE ACC TAG INPUT
-                                ImGui::PushItemWidth(200);
-                                ImGui::InputText(Tr("Storage Account Tag"), g_StorageTagBuf, IM_ARRAYSIZE(g_StorageTagBuf));
-                                ImGui::PopItemWidth();
-
-                                // SAVE
-                                if (ImGui::IsItemDeactivatedAfterEdit()) {
-                                    g_StorageTag = g_StorageTagBuf;
-                                    SaveConfig();
-                                }
-
-                                ImGui::Spacing();
-                                ImGui::SliderInt(Tr("Auto-Transfer Threshold (X)"), &g_TransferThreshold, 3, 150);
-                                ImGui::TextDisabled(Tr("If any farming account has >= X items, it will signal this warehouse."));
-                            }
-
-                           
                             ImGui::NextColumn();
                             ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), Tr("MAIN ACTIONS"));
                             ImGui::Spacing();
@@ -1306,28 +1411,7 @@ void RenderApp() {
                             // =========================================================
                             // START / STOP BUTTONS
                             // =========================================================
-                            if (i == 5) { //PURPLE START BOT BUTTON FOR STORAGE ACCOUNT.
-                                if (g_Bots[i].isRunning) {
-                                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.5f, 0.2f, 0.5f, 1.0f));
-                                    if (ImGui::Button(Tr("STOP AUTO TRANSFER"), ImVec2(250, 55))) {
-                                        g_Bots[i].isRunning = false;
-                                        g_Bots[i].statusText = "TRANSFER STOPPED";
-                                        AddLog(i, "Storage Auto-Transfer Mode Halted.", ImVec4(1, 0.5f, 0.5f, 1));
-                                    }
-                                    ImGui::PopStyleColor();
-                                }
-                                else {
-                                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.2f, 0.8f, 1.0f)); 
-                                    if (ImGui::Button(Tr("START AUTO TRANSFER"), ImVec2(250, 55))) {
-                                        g_Bots[i].isRunning = true;
-                                        g_Bots[i].statusText = "LISTENING FOR SIGNALS";
-                                        AddLog(i, "Storage Auto-Transfer Activated. Listening on encrypted radio channel...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
-                                        std::thread([i]() { RunStorageMaster(i); }).detach();
-                                    }
-                                    ImGui::PopStyleColor();
-                                }
-                            }
-                            else { 
+                            { // START / STOP BOT (storage/transfer modu kaldırıldı, hepsi aynı)
                                 if (g_Bots[i].isRunning) {
                                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));
                                     if (ImGui::Button(Tr("STOP BOT"), ImVec2(250, 55))) {
@@ -1489,9 +1573,9 @@ void RenderApp() {
                         else {
                             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1), Tr("Instance is disabled."));
                         }
-                        ImGui::EndTabItem();
-                    }
-                }
+                    } // instance gövde scope'u kapanışı
+                    ImGui::EndTabItem();
+                } // "Instance Settings" sekmesi kapanışı
 
                 if (ImGui::BeginTabItem(Tr("Account Management"))) {
                     ImGui::Spacing();
@@ -1502,10 +1586,10 @@ void RenderApp() {
                     static int swpSrcInst = 0, swpSrcSlot = 0;
                     static int swpDstInst = 1, swpDstSlot = 0;
 
-                    const char* instItems[] = {
-     Tr("Instance 1"), Tr("Instance 2"), Tr("Instance 3"),
-     Tr("Instance 4"), Tr("Instance 5"), Tr("Instance 6 (STORAGE)")
-                    };
+                    int instCount = 0;
+                    const char** instItems = GetInstanceItems(&instCount);
+                    if (swpSrcInst < 0 || swpSrcInst >= instCount) swpSrcInst = 0;
+                    if (swpDstInst < 0 || swpDstInst >= instCount) swpDstInst = 0;
                     const char* slotItems[] = {
                         Tr("Slot 1"), Tr("Slot 2"), Tr("Slot 3"), Tr("Slot 4"), Tr("Slot 5"),
                         Tr("Slot 6"), Tr("Slot 7"), Tr("Slot 8"), Tr("Slot 9"), Tr("Slot 10"),
@@ -1514,12 +1598,12 @@ void RenderApp() {
 
                     ImGui::Columns(2, "SwapperCols", false);
                     ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), Tr("SOURCE (From)"));
-                    ImGui::Combo(Tr("Instance##src"), &swpSrcInst, instItems, IM_ARRAYSIZE(instItems));
+                    ImGui::Combo(Tr("Instance##src"), &swpSrcInst, instItems, instCount);
                     ImGui::Combo(Tr("Slot##src"), &swpSrcSlot, slotItems, IM_ARRAYSIZE(slotItems));
 
                     ImGui::NextColumn();
                     ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), Tr("DESTINATION (To)"));
-                    ImGui::Combo(Tr("Instance##dst"), &swpDstInst, instItems, IM_ARRAYSIZE(instItems));
+                    ImGui::Combo(Tr("Instance##dst"), &swpDstInst, instItems, instCount);
                     ImGui::Combo(Tr("Slot##dst"), &swpDstSlot, slotItems, IM_ARRAYSIZE(slotItems));
                     ImGui::Columns(1);
 
@@ -1560,8 +1644,9 @@ void RenderApp() {
                     ImGui::Separator(); ImGui::Spacing();
 
                     static int wipeInst = 0;
+                    if (wipeInst < 0 || wipeInst >= instCount) wipeInst = 0;
                     ImGui::PushItemWidth(200);
-                    ImGui::Combo("##wipe", &wipeInst, instItems, IM_ARRAYSIZE(instItems));
+                    ImGui::Combo("##wipe", &wipeInst, instItems, instCount);
                     ImGui::PopItemWidth();
 
                     ImGui::Spacing();
@@ -1591,10 +1676,12 @@ void RenderApp() {
                     ImGui::Separator(); ImGui::Spacing();
 
                     static int tomInst = 0, tomSlot = 0;
-                    const char* instItems[] = { Tr("Instance 1"), Tr("Instance 2"), Tr("Instance 3"), Tr("Instance 4"), Tr("Instance 5"), Tr("Instance 6 (STORAGE)") };
+                    int instCount = 0;
+                    const char** instItems = GetInstanceItems(&instCount);
+                    if (tomInst < 0 || tomInst >= instCount) tomInst = 0;
                     const char* slotItems[] = { Tr("Slot 1"), Tr("Slot 2"), Tr("Slot 3"), Tr("Slot 4"), Tr("Slot 5") };
 
-                    ImGui::Combo(Tr("Instance##tom"), &tomInst, instItems, IM_ARRAYSIZE(instItems));
+                    ImGui::Combo(Tr("Instance##tom"), &tomInst, instItems, instCount);
                     ImGui::Combo(Tr("Slot##tom"), &tomSlot, slotItems, IM_ARRAYSIZE(slotItems));
                     ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
@@ -1634,11 +1721,13 @@ void RenderApp() {
                     ImGui::Separator(); ImGui::Spacing();
 
                     static int infoInst = 0, infoSlot = 0;
-                    const char* instItems[] = { Tr("Instance 1"), Tr("Instance 2"), Tr("Instance 3"), Tr("Instance 4"), Tr("Instance 5"), Tr("Instance 6 (STORAGE)") };
+                    int instCount = 0;
+                    const char** instItems = GetInstanceItems(&instCount);
+                    if (infoInst < 0 || infoInst >= instCount) infoInst = 0;
                     const char* slotItems[] = { Tr("Slot 1"), Tr("Slot 2"), Tr("Slot 3"), Tr("Slot 4"), Tr("Slot 5") };
 
                     ImGui::PushItemWidth(150);
-                    ImGui::Combo(Tr("Instance##info"), &infoInst, instItems, IM_ARRAYSIZE(instItems));
+                    ImGui::Combo(Tr("Instance##info"), &infoInst, instItems, instCount);
                     ImGui::SameLine();
                     ImGui::Combo(Tr("Slot##info"), &infoSlot, slotItems, IM_ARRAYSIZE(slotItems));
                     ImGui::PopItemWidth();
@@ -1818,6 +1907,7 @@ void RenderApp() {
                     ImGui::Separator();
                     RenderTemplateRow(Tr("Cross"), g_crossPathBuf, IM_ARRAYSIZE(g_crossPathBuf), cross_templatePath, &g_Thresholds.crossThreshold);
                     RenderTemplateRow(Tr("Create Sale"), g_createSalePathBuf, IM_ARRAYSIZE(g_createSalePathBuf), create_sale_templatePath, &g_Thresholds.createSaleThreshold);
+                    RenderTemplateRow(Tr("Advertise"), g_advertisePathBuf, IM_ARRAYSIZE(g_advertisePathBuf), advertise_templatePath, &g_Thresholds.advertiseThreshold);
                     RenderTemplateRow(Tr("Level Up"), g_levelupPathBuf, IM_ARRAYSIZE(g_levelupPathBuf), levelup_templatePath, &g_Thresholds.levelUpThreshold);
                     RenderTemplateRow(Tr("Level Up Cont."), g_levelupContinuePathBuf, IM_ARRAYSIZE(g_levelupContinuePathBuf), levelup_continue_templatePath, &g_Thresholds.levelUpThreshold);
                     ImGui::EndChild();
@@ -1833,8 +1923,10 @@ void RenderApp() {
 
                     static int tmplInst = 0;
                     ImGui::SetNextItemWidth(200);
-                    const char* instItems[] = { Tr("Instance 1"), Tr("Instance 2"), Tr("Instance 3"), Tr("Instance 4"), Tr("Instance 5"), Tr("Instance 6") };
-                    ImGui::Combo(Tr("Select Emulator to Capture##tmpl"), &tmplInst, instItems, IM_ARRAYSIZE(instItems));
+                    int instCount = 0;
+                    const char** instItems = GetInstanceItems(&instCount);
+                    if (tmplInst < 0 || tmplInst >= instCount) tmplInst = 0;
+                    ImGui::Combo(Tr("Select Emulator to Capture##tmpl"), &tmplInst, instItems, instCount);
 
                     static char tmplStatus[128] = "Ready.";
                     static ImVec4 tmplColor = ImVec4(0.7f, 0.7f, 0.7f, 1.0f);
@@ -2008,7 +2100,7 @@ void RenderApp() {
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::TextWrapped(Tr("Want to ask something? ping me @inna in server. i will reply asap."));
+            ImGui::TextWrapped(Tr("Want to ask something? ping me @Nxr in server. i will reply asap."));
             ImGui::Spacing(); ImGui::Spacing();
 
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.12f, 0.12f, 1.00f));
@@ -2029,7 +2121,7 @@ void RenderApp() {
                 ImGui::Indent();
                 ImGui::TextWrapped(Tr("Modes: Single Account Mode: It just plants, harvests, sells and repeats. Multi Account Mode: Bot Plants, Harvests, sells, changes account, repeats. After all accounts done, return to first account and so on."));
                 ImGui::Spacing();
-                ImGui::TextWrapped(Tr("To enable this you must Save your accounts. Enables automatically."));
+                ImGui::TextWrapped(Tr("To enable Multi account mode, you must Save at least 2 accounts and enable in bot config tab."));
                 ImGui::Spacing();
                 ImGui::TextWrapped(Tr("How to save account : Create New account in Account management tab, After skipping tutorials and getting to farm level 7, Press \"Save Slot Data\"."));
                 ImGui::TextWrapped(Tr("If you want to change accounts manually you can press \"Load Slot Data\". Dont press this if you haven't saved account yet."));
@@ -2043,6 +2135,7 @@ void RenderApp() {
             if (ImGui::CollapsingHeader(Tr("3. Auto Tom"))) {
                 ImGui::Indent();
                 ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), Tr("Read These Carefully or your bot can break."));
+				ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("WARNING!!! I Quitted developing this bot project, and auto tom was not done. IT MAY NOT WORK PERFECTLY."));
                 ImGui::TextWrapped(Tr("To use Auto Tom, make sure Tom is not on Cooldown."));
                 ImGui::TextWrapped(Tr("if bot can't find tom's crate, then make your own template."));
                 ImGui::Unindent();
@@ -2052,6 +2145,7 @@ void RenderApp() {
             // 4. AUTO TRANSFER BEM/SEM
             if (ImGui::CollapsingHeader(Tr("4. Auto Transfer Bem/Sem"))) {
                 ImGui::Indent();
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("WARNING!!! I Quitted developing this bot project, and auto transfer bem/sem was not done. IT MAY NOT WORK PERFECTLY."));
                 ImGui::TextWrapped(Tr("You have to enable instance 6 and put an account there. it will Work as storage account there."));
                 ImGui::Spacing();
                 ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("DONT ADD FRIEND YOUR BOTS MANUALLY. yes, you heard it. IF you already added your bots, please remove them. my bot will automatically add friend."));
@@ -2098,9 +2192,11 @@ void RenderApp() {
             ImGui::Separator(); ImGui::Spacing();
 
             
-            const char* instItems[] = { "Instance 1", "Instance 2", "Instance 3", "Instance 4", "Instance 5", "Instance 6" };
+            int instCount = 0;
+            const char** instItems = GetInstanceItems(&instCount);
+            if (g_VisionSelectedInst < 0 || g_VisionSelectedInst >= instCount) g_VisionSelectedInst = 0;
             ImGui::SetNextItemWidth(200);
-            ImGui::Combo(Tr("Target Instance"), &g_VisionSelectedInst, instItems, IM_ARRAYSIZE(instItems));
+            ImGui::Combo(Tr("Target Instance"), &g_VisionSelectedInst, instItems, instCount);
             ImGui::Spacing();
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
