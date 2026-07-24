@@ -17,13 +17,13 @@
 #include <stdio.h>
 #include <sstream>
 #include <vector>
+#include <algorithm>
+#include <cctype>
 
 
 // GLOBAL VARIABLES
 namespace fs = std::filesystem;
 std::string g_StorageTag = ""; 
-std::string kLDPlayerAdbPath = "C:\\LDPlayer\\LDPlayer9\\adb.exe";
-std::string kLDConsolePath = "C:\\LDPlayer\\LDPlayer9\\ldconsole.exe";
 
 
 extern TemplateThresholds g_Thresholds;
@@ -59,6 +59,22 @@ extern void SaveConfig();
 extern void SaveInventoryData();
 extern std::string GetClipboardText();
 
+static std::wstring Utf8ToWide(const std::string& text) {
+    if (text.empty()) return {};
+    int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, nullptr, 0);
+    if (length <= 1) return {};
+    std::wstring result(static_cast<size_t>(length), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, result.data(), length);
+    result.pop_back();
+    return result;
+}
+
+static void ShowLocalizedMessage(const std::string& message, const char* title, UINT flags) {
+    std::wstring wideMessage = Utf8ToWide(message);
+    std::wstring wideTitle = Utf8ToWide(Tr(title));
+    MessageBoxW(nullptr, wideMessage.c_str(), wideTitle.c_str(), flags | MB_TOPMOST);
+}
+
 // INJECT FOLDERS
 const std::string GAME_DATA_PATH = "/data/data/com.supercell.hayday/shared_prefs/storage_new.xml";
 const std::string ZOOM_DATA_PATH = "/data/data/com.supercell.hayday/update/data/game_config.csv";
@@ -70,9 +86,17 @@ TransferRequest g_TransferRequest;
 
 // ==============================================================================
 std::string GetUniversalAdbPath(int instanceId) {
-    if (g_Bots[instanceId].emulatorType == 1) return kLDPlayerAdbPath;
-    // IF YOU WANT TO ADD BLUESTACKS SUPPORT, ADD else if (type == 2) HERE. I QUITTED THE PROJECT BEFORE ADDING BLUESTACKS.
-    return kAdbPath; // MEMU AS DEFAULT
+    (void)instanceId;
+    return kAdbPath;
+}
+
+static bool RequireConfiguredEmulatorPaths(int instanceId) {
+    if (AreEmulatorPathsValid()) return true;
+    AddLog(
+        instanceId,
+        Tr("Action blocked: Please correct your PATHs in Settings."),
+        ImVec4(1.0f, 0.25f, 0.2f, 1.0f));
+    return false;
 }
 // ==============================================================================
 // RUN CMD IN BACKGROUND BECAUSE WITHOUT THIS , THE CMD WINDOW WILL POP UP (FLICKER, OPEN AND CLOSE IMMEDIATELY) WHICH IS ANNOYING. THIS FUNCTION HIDES THE CMD WINDOW COMPLETELY.
@@ -102,43 +126,301 @@ bool RunCmdHidden(const std::string& command) {
     CloseHandle(pi.hThread);
     return true;
 }
-// GET ADB OUTPUT AND RETURN OUTPUT AS STRING TO READ STUFF LIKE INPUT DEVICE EVENT ETC.
-std::string GetAdbOutput(int instanceId, std::string args) {
-    std::string serial = g_Bots[instanceId].adbSerial; // EXAMPLE: 127.0.0.1:21503
-    std::string cmd = "cmd.exe /c \"\"" + kAdbPath + "\" -s " + serial + " " + args + "\"";
 
-    SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
-    HANDLE hRead, hWrite;
-    CreatePipe(&hRead, &hWrite, &sa, 0);
+struct ProcessCaptureResult {
+    bool launched = false;
+    bool timedOut = false;
+    DWORD exitCode = ERROR_GEN_FAILURE;
+    std::string output;
 
-    STARTUPINFOA si;
-    ZeroMemory(&si, sizeof(si));
+    bool Succeeded() const {
+        return launched && !timedOut && exitCode == 0;
+    }
+};
+
+static ProcessCaptureResult RunExecutableCapture(
+    const std::string& executable,
+    const std::string& args,
+    DWORD timeoutMs = 10000) {
+    ProcessCaptureResult result;
+
+    SECURITY_ATTRIBUTES sa{ sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE };
+    HANDLE readPipe = nullptr;
+    HANDLE writePipe = nullptr;
+    if (!CreatePipe(&readPipe, &writePipe, &sa, 0)) {
+        result.output = "Failed to create output pipe.";
+        return result;
+    }
+    SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOA si{};
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-    si.hStdOutput = hWrite;
-    si.hStdError = hWrite;
+    si.hStdOutput = writePipe;
+    si.hStdError = writePipe;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
     si.wShowWindow = SW_HIDE;
 
-    PROCESS_INFORMATION pi;
-    ZeroMemory(&pi, sizeof(pi));
+    PROCESS_INFORMATION pi{};
+    std::string commandLine = "\"" + executable + "\"";
+    if (!args.empty()) commandLine += " " + args;
+    std::vector<char> commandBuffer(commandLine.begin(), commandLine.end());
+    commandBuffer.push_back('\0');
 
-    if (CreateProcessA(NULL, (LPSTR)cmd.c_str(), NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
-        WaitForSingleObject(pi.hProcess, 10000);
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
-    }
-    CloseHandle(hWrite);
+    BOOL launched = CreateProcessA(
+        executable.c_str(),
+        commandBuffer.data(),
+        nullptr,
+        nullptr,
+        TRUE,
+        CREATE_NO_WINDOW,
+        nullptr,
+        nullptr,
+        &si,
+        &pi);
 
-    std::string result = "";
-    DWORD read;
-    char buffer[256];
-    while (ReadFile(hRead, buffer, sizeof(buffer) - 1, &read, NULL) && read != 0) {
-        buffer[read] = '\0';
-        result += buffer;
+    CloseHandle(writePipe);
+    if (!launched) {
+        result.output = "Failed to start process. Windows error: " + std::to_string(GetLastError());
+        CloseHandle(readPipe);
+        return result;
     }
-    CloseHandle(hRead);
+
+    result.launched = true;
+    auto drainOutput = [&]() {
+        DWORD available = 0;
+        while (PeekNamedPipe(readPipe, nullptr, 0, nullptr, &available, nullptr) && available > 0) {
+            char buffer[512];
+            DWORD bytesRead = 0;
+            DWORD bytesToRead = (available < sizeof(buffer)) ? available : (DWORD)sizeof(buffer);
+            if (!ReadFile(readPipe, buffer, bytesToRead, &bytesRead, nullptr) || bytesRead == 0) {
+                break;
+            }
+            result.output.append(buffer, bytesRead);
+            available -= bytesRead;
+        }
+        };
+
+    ULONGLONG deadline = GetTickCount64() + timeoutMs;
+    while (true) {
+        drainOutput();
+        DWORD waitResult = WaitForSingleObject(pi.hProcess, 25);
+        if (waitResult == WAIT_OBJECT_0) break;
+        if (waitResult == WAIT_FAILED) break;
+        if (GetTickCount64() >= deadline) {
+            result.timedOut = true;
+            TerminateProcess(pi.hProcess, 1);
+            WaitForSingleObject(pi.hProcess, 1000);
+            break;
+        }
+    }
+
+    drainOutput();
+    GetExitCodeProcess(pi.hProcess, &result.exitCode);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    CloseHandle(readPipe);
     return result;
 }
+
+static ProcessCaptureResult RunAdbCapture(const std::string& args, DWORD timeoutMs = 10000) {
+    return RunExecutableCapture(kAdbPath, args, timeoutMs);
+}
+
+static ProcessCaptureResult RunAdbCaptureForInstance(
+    int instanceId,
+    const std::string& args,
+    DWORD timeoutMs = 10000) {
+    std::string serial = g_Bots[instanceId].adbSerial;
+    return RunAdbCapture("-s " + serial + " " + args, timeoutMs);
+}
+
+static std::string TrimAscii(std::string value) {
+    auto isNotSpace = [](unsigned char c) { return !std::isspace(c); };
+    value.erase(value.begin(), std::find_if(value.begin(), value.end(), isNotSpace));
+    value.erase(std::find_if(value.rbegin(), value.rend(), isNotSpace).base(), value.end());
+    return value;
+}
+
+static std::string ToLowerAsciiCopy(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+        });
+    return value;
+}
+
+std::string GetAdbDevicesList() {
+    if (!AreEmulatorPathsValid()) {
+        return "$ adb devices\r\nERROR: Configure valid emulator paths in Settings first.";
+    }
+
+    ProcessCaptureResult result = RunAdbCapture("devices", 15000);
+    std::ostringstream output;
+    output << "$ adb devices\r\n";
+    if (!result.launched) {
+        output << "ERROR: " << result.output;
+    }
+    else if (result.timedOut) {
+        output << "ERROR: adb devices timed out.";
+    }
+    else {
+        output << (result.output.empty() ? "(no output)" : result.output);
+        if (result.exitCode != 0) {
+            output << "\r\n[Exit code: " << result.exitCode << "]";
+        }
+    }
+    return output.str();
+}
+
+// GET ADB OUTPUT AND RETURN OUTPUT AS STRING TO READ STUFF LIKE INPUT DEVICE EVENT ETC.
+std::string GetAdbOutput(int instanceId, std::string args) {
+    return RunAdbCaptureForInstance(instanceId, args).output;
+}
+
+enum class AdbDeviceState {
+    Online,
+    Offline,
+    Unauthorized,
+    Unavailable
+};
+
+static AdbDeviceState QueryAdbDeviceState(int instanceId, std::string* rawOutput = nullptr) {
+    ProcessCaptureResult result = RunAdbCaptureForInstance(instanceId, "get-state", 5000);
+    if (rawOutput) *rawOutput = result.output;
+
+    std::istringstream lines(result.output);
+    std::string line;
+    while (std::getline(lines, line)) {
+        if (ToLowerAsciiCopy(TrimAscii(line)) == "device" && result.Succeeded()) {
+            return AdbDeviceState::Online;
+        }
+    }
+
+    std::string normalized = ToLowerAsciiCopy(result.output);
+    if (normalized.find("offline") != std::string::npos) return AdbDeviceState::Offline;
+    if (normalized.find("unauthorized") != std::string::npos) return AdbDeviceState::Unauthorized;
+    return AdbDeviceState::Unavailable;
+}
+
+static std::string MakeSingleLine(std::string value) {
+    for (char& c : value) {
+        if (c == '\r' || c == '\n' || c == '\t') c = ' ';
+    }
+    value = TrimAscii(value);
+    if (value.size() > 300) value = value.substr(0, 300) + "...";
+    return value;
+}
+
+static bool PrepareLdPlayerAdbForBot(int instanceId) {
+    BotInstance& bot = g_Bots[instanceId];
+    if (bot.emulatorType != 1) return true;
+
+    bot.statusText = "STARTING ADB...";
+    AddLog(instanceId, Tr("Starting ADB server for LDPlayer..."), ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
+
+    ProcessCaptureResult startResult = RunAdbCapture("start-server", 15000);
+    if (!startResult.Succeeded()) {
+        AddLog(instanceId, Tr("Bot start failed: Could not start the ADB server."), ImVec4(1, 0, 0, 1));
+        if (!startResult.output.empty()) {
+            AddLog(instanceId, std::string(Tr("ADB output: ")) + MakeSingleLine(startResult.output), ImVec4(1, 0.5f, 0.2f, 1));
+        }
+        bot.isRunning = false;
+        bot.statusText = "ADB START FAILED";
+        return false;
+    }
+
+    std::string serial = bot.adbSerial;
+    ProcessCaptureResult connectResult = RunAdbCapture("connect " + serial, 10000);
+    if (!connectResult.output.empty()) {
+        AddLog(instanceId, std::string(Tr("ADB connection: ")) + MakeSingleLine(connectResult.output), ImVec4(0.65f, 0.75f, 0.85f, 1));
+    }
+
+    AdbDeviceState state = AdbDeviceState::Unavailable;
+    for (int attempt = 0; attempt < 10 && bot.isRunning; ++attempt) {
+        state = QueryAdbDeviceState(instanceId);
+        if (state == AdbDeviceState::Online) {
+            AddLog(instanceId, Tr("LDPlayer ADB is online. Starting bot..."), ImVec4(0, 1, 0, 1));
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    if (!bot.isRunning) return false;
+
+    if (state == AdbDeviceState::Offline) {
+        AddLog(instanceId, Tr("Bot start failed: LDPlayer ADB device is offline."), ImVec4(1, 0, 0, 1));
+    }
+    else if (state == AdbDeviceState::Unauthorized) {
+        AddLog(instanceId, Tr("Bot start failed: LDPlayer ADB device is unauthorized."), ImVec4(1, 0, 0, 1));
+    }
+    else {
+        AddLog(instanceId, Tr("Bot start failed: LDPlayer ADB device was not found."), ImVec4(1, 0, 0, 1));
+    }
+
+    bot.isRunning = false;
+    bot.statusText = "ADB OFFLINE";
+    return false;
+}
+
+static bool AdbCommandSucceeded(const ProcessCaptureResult& result) {
+    if (!result.Succeeded()) return false;
+    std::string output = ToLowerAsciiCopy(result.output);
+    return output.find("error:") == std::string::npos &&
+        output.find("device offline") == std::string::npos &&
+        output.find("unauthorized") == std::string::npos &&
+        output.find("failed to") == std::string::npos;
+}
+
+static void LogInjectionAdbFailure(
+    int instanceId,
+    const std::string& step,
+    const ProcessCaptureResult& result) {
+    AdbDeviceState state = QueryAdbDeviceState(instanceId);
+    if (state == AdbDeviceState::Offline) {
+        AddLog(instanceId, Tr("Injection failed: ADB device is offline. Files were not pushed."), ImVec4(1, 0, 0, 1));
+        return;
+    }
+    if (state == AdbDeviceState::Unauthorized) {
+        AddLog(instanceId, Tr("Injection failed: ADB device is unauthorized. Files were not pushed."), ImVec4(1, 0, 0, 1));
+        return;
+    }
+    if (state == AdbDeviceState::Unavailable) {
+        AddLog(instanceId, Tr("Injection failed: ADB device is not connected. Files were not pushed."), ImVec4(1, 0, 0, 1));
+        return;
+    }
+
+    AddLog(instanceId, Tr("Injection failed. Check the ADB output for details."), ImVec4(1, 0, 0, 1));
+    if (!result.output.empty()) {
+        AddLog(instanceId, std::string(Tr("ADB output: ")) + MakeSingleLine(result.output), ImVec4(1, 0.5f, 0.2f, 1));
+    }
+}
+
+static bool RunCheckedInjectionAdbCommand(
+    int instanceId,
+    const std::string& args,
+    const std::string& step,
+    DWORD timeoutMs = 30000) {
+    ProcessCaptureResult result = RunAdbCaptureForInstance(instanceId, args, timeoutMs);
+    if (AdbCommandSucceeded(result)) return true;
+    LogInjectionAdbFailure(instanceId, step, result);
+    return false;
+}
+
+static bool VerifyInjectedRemoteFile(int instanceId, const std::string& remotePath) {
+    std::string verifyCommand =
+        "shell \"su -c 'if [ -s " + remotePath +
+        " ]; then echo NXRTH_OK; else echo NXRTH_MISSING; fi'\"";
+    ProcessCaptureResult result = RunAdbCaptureForInstance(instanceId, verifyCommand, 10000);
+    if (AdbCommandSucceeded(result) &&
+        result.output.find("NXRTH_OK") != std::string::npos &&
+        result.output.find("NXRTH_MISSING") == std::string::npos) {
+        return true;
+    }
+
+    LogInjectionAdbFailure(instanceId, "verifying " + remotePath, result);
+    return false;
+}
+
 // THIS FUNCTION HELPS TO MAKE SURE USER IS USING 640X480 100 DPI RESOLUTION. IF NOT, BOT WON'T START.
 std::string GetMEmuConfig(int instanceId, std::string key) {
 	// FIND MEMUC.EXE BASED ON THE ADB PATH (IN CASE USER MOVED MEmu FOLDER OR RENAMED IT, WE CAN STILL FIND MEMUC.EXE) BECAUSE MEMUC EXE IS IN THE SAME FOLDER AS ADB.EXE
@@ -225,6 +507,7 @@ void ForceCloseAllMenus(int instanceId) {
 
 // TEMPLATE TEST BUTTONS USED IN GUI TO HELP USERS IF THEIR TEMPLATES ARE WORKING PROPERLY OR NOT
 void PerformTemplateTest(int instanceId, std::string templatePath, std::string testName, float threshold, bool useGrayscale) {
+    if (!RequireConfiguredEmulatorPaths(instanceId)) return;
     AddLog(instanceId, std::string(Tr("Running ")) + Tr(testName.c_str()) + "...", ImVec4(1, 1, 0, 1));
     std::thread([instanceId, templatePath, testName, threshold, useGrayscale]() {
         cv::Mat frame = CaptureInstanceScreen(instanceId, kAdbPath, g_Bots[instanceId].adbSerial);
@@ -274,14 +557,14 @@ void EmulatorCrashWatchdog(int instanceId) {
                     
                     isHungState[instanceId] = true;
                     hungStart[instanceId] = std::chrono::steady_clock::now();
-                    AddLog(instanceId, "[WATCHDOG] Emulator not responding! Waiting 15s to confirm...", ImVec4(1, 0.5f, 0, 1));
+                    AddLog(instanceId, Tr("Emulator is not responding. Waiting 15 seconds..."), ImVec4(1, 0.5f, 0, 1));
                 }
                 else {
 					// CHECK HOW LONG IT HAS BEEN IN HUNG STATE
                     auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - hungStart[instanceId]).count();
 
                     if (elapsed >= 15) { // IF ITS BEEN MORE THAN 15 SEC RESTART
-                        AddLog(instanceId, "[WATCHDOG] CRITICAL: Emulator DEAD for 15s! Forcing restart...", ImVec4(1, 0, 0, 1));
+                        AddLog(instanceId, Tr("Emulator is still unresponsive. Restarting..."), ImVec4(1, 0, 0, 1));
 
                         if (bot.emulatorType == 1) { // LDPlayer
                             RunCmdHidden("cmd.exe /c \"\"" + kMEmuConsolePath + "\" quit --index " + std::to_string(bot.emuIndex) + "\"");
@@ -303,7 +586,7 @@ void EmulatorCrashWatchdog(int instanceId) {
             else {
 				// EMULATOR IS RESPONDING FINE, BUT CHECK IF WE WERE IN HUNG STATE BEFORE. IF YES, LOG RECOVERY.
                 if (isHungState[instanceId]) {
-                    AddLog(instanceId, "[WATCHDOG] Emulator recovered. False alarm cancelled.", ImVec4(0, 1, 0, 1));
+                    AddLog(instanceId, Tr("Emulator is responding again."), ImVec4(0, 1, 0, 1));
                     isHungState[instanceId] = false;
                 }
             }
@@ -331,7 +614,7 @@ void EmulatorCrashWatchdog(int instanceId) {
 		pidFailCount[instanceId]++; // INCREMENT FAIL COUNT IF PID NOT FOUND
 
         if (pidFailCount[instanceId] >= 3) { // IF CANT FIND PID FOR 3 TIMES
-            AddLog(instanceId, "[WATCHDOG] Hay Day crashed to desktop (3 Fails)! Relaunching...", ImVec4(1, 0.5f, 0, 1));
+            AddLog(instanceId, Tr("Hay Day process is unavailable. Relaunching..."), ImVec4(1, 0.5f, 0, 1));
             std::string launchCmd = "cmd /c \"\"" + currentAdb + "\" -s " + serial + " shell monkey -p com.supercell.hayday -c android.intent.category.LAUNCHER 1\"";
             RunCmdHidden(launchCmd);
 
@@ -339,7 +622,7 @@ void EmulatorCrashWatchdog(int instanceId) {
             std::this_thread::sleep_for(std::chrono::seconds(10));
         }
         else {
-            AddLog(instanceId, "[WATCHDOG] Game process missing... Warning " + std::to_string(pidFailCount[instanceId]) + "/3", ImVec4(1, 1, 0, 1));
+            AddLog(instanceId, std::string(Tr("Game process check failed: ")) + std::to_string(pidFailCount[instanceId]) + "/3", ImVec4(1, 1, 0, 1));
         }
     }
     else {
@@ -351,21 +634,21 @@ void HandleReviveHeartbeat(int instanceId) {
     BotInstance& bot = g_Bots[instanceId];
     if (!bot.useReviveMode || strlen(bot.reviveTemplatePath) < 5) return;
 
-    AddLog(instanceId, "Revive: Checking custom anchor...", ImVec4(1, 1, 0, 1));
+    AddLog(instanceId, Tr("Checking revive template..."), ImVec4(1, 1, 0, 1));
 
     cv::Mat screen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
     MatchResult res = FindImage(screen, bot.reviveTemplatePath, 0.70f);
 
     if (res.found) {
-        AddLog(instanceId, "Revive: System OK.", ImVec4(0, 1, 0, 1));
+        AddLog(instanceId, Tr("Revive template found."), ImVec4(0, 1, 0, 1));
 		bot.reviveFailCounter = 0; // SUCCESS, RESET FAIL COUNTER 
     }
     else {
         bot.reviveFailCounter++;
-        AddLog(instanceId, "Revive: Anchor not found! Strike " + std::to_string(bot.reviveFailCounter) + "/3", ImVec4(1, 0.5f, 0, 1));
+        AddLog(instanceId, std::string(Tr("Revive template not found: ")) + std::to_string(bot.reviveFailCounter) + "/3", ImVec4(1, 0.5f, 0, 1));
 
         if (bot.reviveFailCounter >= 3) {
-            AddLog(instanceId, "CRITICAL: 3 Strikes! Restarting game engine...", ImVec4(1, 0, 0, 1));
+            AddLog(instanceId, Tr("Revive check failed three times. Restarting the game..."), ImVec4(1, 0, 0, 1));
             // REOPEN HAYDAY
             RunAdbCommand(instanceId, "shell am force-stop com.supercell.hayday");
             std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -380,6 +663,7 @@ void HandleReviveHeartbeat(int instanceId) {
 //IMPORTANT FILES INJECTOR. 
 // THIS FUNCTION INJECTS(PUSHES) FILES TO THE ROOT.
 void InjectImportantFiles(int instanceId) {
+    if (!RequireConfiguredEmulatorPaths(instanceId)) return;
     char buffer[MAX_PATH];
     GetModuleFileNameA(NULL, buffer, MAX_PATH);
     std::string::size_type pos = std::string(buffer).find_last_of("\\/");
@@ -396,7 +680,7 @@ void InjectImportantFiles(int instanceId) {
 
     for (const auto& file : nxrthFiles) {
         if (!fs::exists(exeDir + "\\injecthacks\\" + file)) {
-            AddLog(instanceId, "Error: Missing encrypted " + file + " in injecthacks folder!", ImVec4(1, 0, 0, 1));
+            AddLog(instanceId, std::string(Tr("Missing injection file: ")) + file, ImVec4(1, 0, 0, 1));
             return;
         }
     }
@@ -405,43 +689,81 @@ void InjectImportantFiles(int instanceId) {
         return;
     }
 
-    AddLog(instanceId, Tr("Starting NXRTH Ultimate Injection (This will take 10-15 seconds)..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+    AddLog(instanceId, Tr("Starting verified file injection. This may take 10-15 seconds..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
 
     std::thread([instanceId, exeDir, fontFile, zoomFile, minitouchFile]() {
-		// 1. FORCE CLOSE HAY DAY TO AVOID FILE LOCKS
-        AddLog(instanceId, Tr("Force stopping Hay Day..."), ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-        RunAdbCommand(instanceId, "shell am force-stop com.supercell.hayday");
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500)); // WAIT FOR EMULATOR JUST IN CASE
+        std::string initialStateOutput;
+        AdbDeviceState initialState = QueryAdbDeviceState(instanceId, &initialStateOutput);
+        if (initialState != AdbDeviceState::Online) {
+            ProcessCaptureResult stateResult;
+            stateResult.launched = true;
+            stateResult.exitCode = 1;
+            stateResult.output = initialStateOutput;
+            LogInjectionAdbFailure(instanceId, "checking the ADB device", stateResult);
+            return;
+        }
+
+        AddLog(instanceId, Tr("ADB device is online. Starting injection..."), ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
+
+        // 1. FORCE CLOSE HAY DAY TO AVOID FILE LOCKS
+        AddLog(instanceId, Tr("Stopping Hay Day..."), ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell am force-stop com.supercell.hayday",
+            "force stopping Hay Day")) return;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 
         // 2. CREATE TARGET FOLDERS
-        std::string dataDir = "/data/data/com.supercell.hayday/update/data/";
-        std::string scDir = "/data/data/com.supercell.hayday/update/sc/";
-        RunAdbCommand(instanceId, "shell \"su -c 'mkdir -p " + dataDir + "'\"");
-        RunAdbCommand(instanceId, "shell \"su -c 'mkdir -p " + scDir + "'\"");
-        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        const std::string dataDir = "/data/data/com.supercell.hayday/update/data/";
+        const std::string scDir = "/data/data/com.supercell.hayday/update/sc/";
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell \"su -c 'mkdir -p " + dataDir + "'\"",
+            "creating the data folder")) return;
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell \"su -c 'mkdir -p " + scDir + "'\"",
+            "creating the asset folder")) return;
 
         // 3. FONT & LANGUAGE HACK
-        AddLog(instanceId, Tr("1/4: Injecting Font & Language Hack..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
-        std::string tempFont = "/sdcard/temp_languages.csv";
-        RunAdbCommand(instanceId, "push \"" + fontFile + "\" " + tempFont);
-        RunAdbCommand(instanceId, "shell \"su -c 'cp " + tempFont + " " + dataDir + "languages.csv'\"");
-        RunAdbCommand(instanceId, "shell \"su -c 'chmod 777 " + dataDir + "languages.csv'\"");
+        AddLog(instanceId, Tr("1/4: Pushing font and language files..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
+        const std::string tempFont = "/sdcard/temp_languages.csv";
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "push \"" + fontFile + "\" " + tempFont,
+            "pushing languages.csv",
+            60000)) return;
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell \"su -c 'cp " + tempFont + " " + dataDir + "languages.csv'\"",
+            "installing languages.csv")) return;
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell \"su -c 'chmod 777 " + dataDir + "languages.csv'\"",
+            "setting languages.csv permissions")) return;
         RunAdbCommand(instanceId, "shell rm " + tempFont);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); 
 
-        // 4. ZOOM HACK (game_config.csv)
-        AddLog(instanceId, Tr("2/4: Optimizing View Distance (Zoom Hack)..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
-        std::string tempZoom = "/sdcard/temp_config.csv";
-        RunAdbCommand(instanceId, "push \"" + zoomFile + "\" " + tempZoom);
-        RunAdbCommand(instanceId, "shell \"su -c 'cp " + tempZoom + " " + ZOOM_DATA_PATH + "'\"");
-        RunAdbCommand(instanceId, "shell \"su -c 'chmod 777 " + ZOOM_DATA_PATH + "'\"");
+        // 4. ZOOM HACK
+        AddLog(instanceId, Tr("2/4: Pushing view-distance files..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
+        const std::string tempZoom = "/sdcard/temp_config.csv";
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "push \"" + zoomFile + "\" " + tempZoom,
+            "pushing game_config.csv",
+            60000)) return;
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell \"su -c 'cp " + tempZoom + " " + ZOOM_DATA_PATH + "'\"",
+            "installing game_config.csv")) return;
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell \"su -c 'chmod 777 " + ZOOM_DATA_PATH + "'\"",
+            "setting game_config.csv permissions")) return;
         RunAdbCommand(instanceId, "shell rm " + tempZoom);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-        // 5. NATURE HACK (DECRYPTION ON THE FLY)
-        AddLog(instanceId, Tr("3/4: Decrypting & Injecting Secure Visuals (Nature Hack)..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
-
-        std::vector<std::pair<std::string, std::string>> natureMap = {
+        // 5. NATURE ASSETS
+        AddLog(instanceId, Tr("3/4: Preparing and pushing visual assets..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
+        const std::vector<std::pair<std::string, std::string>> natureMap = {
             {"inject.nxrth", "nature_new.sc"},
             {"inject2.nxrth", "nature_new_0.sctx"},
             {"inject3.nxrth", "nature_new_1.sctx"},
@@ -453,52 +775,83 @@ void InjectImportantFiles(int instanceId) {
             std::string nxPath = exeDir + "\\injecthacks\\" + pair.first;
             std::string tempPath = exeDir + "\\injecthacks\\temp_" + pair.second;
 
-			// 1. READ ENCRYPTED .NXRTH FILE.
             std::ifstream inFile(nxPath, std::ios::binary);
-            std::string encryptedData((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+            std::string encryptedData(
+                (std::istreambuf_iterator<char>(inFile)),
+                std::istreambuf_iterator<char>());
             inFile.close();
 
-			// 2. DECRYPT .NXRTH TO RAW DATA USING THE SUPER DUPER SECRET KEY LLMFAOOOOO
             std::string rawData = DecryptXORHex(encryptedData, "NXRTH_NATURE_KEY");
+            if (rawData.empty()) {
+                AddLog(instanceId, std::string(Tr("Injection failed: Could not decrypt ")) + pair.first + ".", ImVec4(1, 0, 0, 1));
+                return;
+            }
 
-			// 3. MAKE A TEMP FILE WITH DECRYPTED RAW DATA (BECAUSE WE CANT PUSH DIRECTLY FROM MEMORY, WE NEED A REAL FILE TO PUSH) AND WRITE RAW DATA TO IT.
             std::ofstream outFile(tempPath, std::ios::binary);
+            if (!outFile.is_open()) {
+                AddLog(instanceId, std::string(Tr("Injection failed: Could not create a temporary file for ")) + pair.second + ".", ImVec4(1, 0, 0, 1));
+                return;
+            }
             outFile.write(rawData.data(), rawData.size());
             outFile.close();
 
-            // 4. PUSH FILES
-            RunAdbCommand(instanceId, "push \"" + tempPath + "\" /data/local/tmp/" + pair.second);
-
-            // 5. DELETE TEMP FILES
-            fs::remove(tempPath);
-
-            // FILES TOO BIG SO WE KINDA WAIT JUST IN CASE.
-            std::this_thread::sleep_for(std::chrono::milliseconds(800));
+            bool pushed = RunCheckedInjectionAdbCommand(
+                instanceId,
+                "push \"" + tempPath + "\" /data/local/tmp/" + pair.second,
+                "pushing " + pair.second,
+                60000);
+            std::error_code removeError;
+            fs::remove(tempPath, removeError);
+            if (!pushed) return;
         }
 
-        // USE EMULATOR'S TEMP FOLDER
-        AddLog(instanceId, "Applying decrypted assets to game engine...", ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-        RunAdbCommand(instanceId, "shell su -c 'cp /data/local/tmp/nature_new* " + scDir + "'");
-        RunAdbCommand(instanceId, "shell su -c 'chmod 777 " + scDir + "nature_new*'");
-
-        // DELETE STUFF IN THAT TEMP FOLDER
+        AddLog(instanceId, Tr("Applying visual assets..."), ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell \"su -c 'cp /data/local/tmp/nature_new* " + scDir + "'\"",
+            "installing visual assets",
+            60000)) return;
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell \"su -c 'chmod 777 " + scDir + "nature_new*'\"",
+            "setting visual asset permissions")) return;
         RunAdbCommand(instanceId, "shell rm /data/local/tmp/nature_new*");
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
 
-        // 6. MINITOUCH PUSH
-        AddLog(instanceId, Tr("4/4: Installing Minitouch Input Agent..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
-        RunAdbCommand(instanceId, "push \"" + minitouchFile + "\" /data/local/tmp/minitouch");
-        RunAdbCommand(instanceId, "shell chmod 777 /data/local/tmp/minitouch");
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        // 6. MINITOUCH
+        AddLog(instanceId, Tr("4/4: Pushing Minitouch..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "push \"" + minitouchFile + "\" /data/local/tmp/minitouch",
+            "pushing minitouch",
+            60000)) return;
+        if (!RunCheckedInjectionAdbCommand(
+            instanceId,
+            "shell chmod 777 /data/local/tmp/minitouch",
+            "setting minitouch permissions")) return;
 
+        std::vector<std::string> filesToVerify = {
+            dataDir + "languages.csv",
+            ZOOM_DATA_PATH,
+            scDir + "nature_new.sc",
+            scDir + "nature_new_0.sctx",
+            scDir + "nature_new_1.sctx",
+            scDir + "nature_new_2.sctx",
+            scDir + "nature_new_3.sctx",
+            "/data/local/tmp/minitouch"
+        };
+        for (const std::string& remoteFile : filesToVerify) {
+            if (!VerifyInjectedRemoteFile(instanceId, remoteFile)) return;
+        }
+
+        AddLog(instanceId, Tr("All injected files were verified on the emulator."), ImVec4(0, 1, 0, 1));
         StartMinitouchStealth(instanceId);
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
-        AddLog(instanceId, Tr("ALL HACKS INJECTED SUCCESSFULLY! Start the game and Set game Language To English."), ImVec4(0, 1, 0, 1));
+        AddLog(instanceId, Tr("Injection completed. All files were pushed and verified."), ImVec4(0, 1, 0, 1));
         }).detach();
 }
 // ACCOUNT SAVER
 void SaveAccountToSlot(int instanceId, int slotIndex) {
+    if (!RequireConfiguredEmulatorPaths(instanceId)) return;
     AddLog(instanceId, Tr("Saving & Encrypting Account Data..."), ImVec4(1, 1, 0, 1));
 
     // DOĞRUDAN SENİN EXTERN FONKSİYONUNU KULLANIYORUZ
@@ -556,6 +909,7 @@ std::string DecryptPureXORHex(const std::string& hexStr, const std::string& key)
 // ACCOUNT LOADER
 // =========================================================
 void LoadAccountFromSlot(int instanceId, int slotIndex) {
+    if (!RequireConfiguredEmulatorPaths(instanceId)) return;
     // DOĞRUDAN SENİN EXTERN FONKSİYONUNU KULLANIYORUZ
     std::string folderPath = GetAppDataPath() + "\\Backups\\Instance_" + std::to_string(instanceId);
     std::string pcFileName = folderPath + "\\account_" + std::to_string(slotIndex + 1) + ".nxrth";
@@ -592,6 +946,11 @@ void LoadAccountFromSlot(int instanceId, int slotIndex) {
 
     std::string pushCmd = "push \"" + tempRawFile + "\" " + tempSdFile;
     RunAdbCommand(instanceId, pushCmd);
+
+    // REMOVE THE LEGACY STORAGE.XML BEFORE INSTALLING STORAGE_NEW.XML.
+    RunAdbCommand(
+        instanceId,
+        "shell \"su -c 'rm -f /data/data/com.supercell.hayday/shared_prefs/storage.xml'\"");
 
     // RENAME THE ACTUAL FILE TO STORAGE_NEW.XML
     std::string moveCmd = "shell \"su -c 'cat " + tempSdFile + " > /data/data/com.supercell.hayday/shared_prefs/storage_new.xml'\"";
@@ -655,7 +1014,7 @@ bool AutoDetectTouchDevice(int instanceId) {
 void ExecuteDenseGridGesture(int instanceId, int startX, int startY, const std::vector<MatchResult>& fields) {
     if (fields.empty()) return;
 
-    AddLog(instanceId, "[INFO] Executing Sweep...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+    AddLog(instanceId, Tr("Executing swipe..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
 
     // 1. FIND FIELD'S BORDER SO THE BOT CAN DRAG IT TO THE CORNER OF THE FIELDS.
     int minX = 99999, maxX = 0, minY = 99999, maxY = 0;
@@ -752,10 +1111,10 @@ void ExecuteDenseGridGesture(int instanceId, int startX, int startY, const std::
             // GIVE SOME TIME TO ANDROID BEFORE CLOSING TCP CONNECTION
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-            AddLog(instanceId, "[SUCCESS] 2-Finger Smart Sweep complete!", ImVec4(0, 1, 0, 1));
+            AddLog(instanceId, Tr("Swipe complete."), ImVec4(0, 1, 0, 1));
         }
         else {
-            AddLog(instanceId, "[ERROR] Minitouch connection failed!", ImVec4(1, 0, 0, 1));
+            AddLog(instanceId, Tr("Minitouch connection failed."), ImVec4(1, 0, 0, 1));
         }
         closesocket(sock);
     }
@@ -1115,7 +1474,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
 
             // COLLECT THE COINS AND GO BACK TO THE FIELDS          
             if (wasInQuarantine) {
-                AddLog(instanceId, "Quarantine lifted via sold crates! Skipping coin collect to save time. Returning to farm.", ImVec4(0, 1, 0, 1));
+                AddLog(instanceId, Tr("Sale detected. Clearing quarantine and returning to the farm."), ImVec4(0, 1, 0, 1));
                 break; 
             }
 
@@ -1137,13 +1496,13 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
         if (!emptyCrate.found) {
             AddLog(instanceId, Tr("Shop is full."), ImVec4(1, 0.8f, 0, 1));
             if (g_TransferRequest.isPending && g_TransferRequest.senderInstanceId == instanceId) {
-                AddLog(instanceId, "HEIST ABORTED: Shop is completely full!", ImVec4(1, 0, 0, 1));
+                AddLog(instanceId, Tr("Shop is full. Sales are paused."), ImVec4(1, 0, 0, 1));
                 g_TransferRequest.isPending = false;
             }
 
 			// IF WE CAN PLACE AN ADVERTISEMENT, DO IT. OTHERWISE, MARK ACCOUNT AS QUARANTINED (SHOP FULL STUCK)
             if (adPlacedThisCycle) {
-                AddLog(instanceId, "Ad already placed this cycle. Closing shop normally.", ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+                AddLog(instanceId, Tr("Advertisement already placed this cycle. Closing the shop."), ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
 				break; // PRESS CROSS TO EXIT SHOP
             }
 
@@ -1156,7 +1515,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
 
             MatchResult filledCrate = FindImage(screen, filledTemplate, 0.75f);
             if (filledCrate.found) {
-                AddLog(instanceId, "Checking advertisement availability on filled crate...", ImVec4(1, 1, 0, 1));
+                AddLog(instanceId, Tr("Checking advertisement availability..."), ImVec4(1, 1, 0, 1));
                 AdbTap(instanceId, filledCrate.x, filledCrate.y);
                 if (!SmartSleep(1200)) return;
 
@@ -1179,12 +1538,12 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                             break;
                         }
                     }
-                    AddLog(instanceId, "Ad icon not found. Waiting... (" + std::to_string(adTry + 1) + "/3)", ImVec4(1, 0.5f, 0, 1));
+                    AddLog(instanceId, std::string(Tr("Advertisement icon not found. Retrying: ")) + std::to_string(adTry + 1) + "/3", ImVec4(1, 0.5f, 0, 1));
                     SmartSleep(400);
                 }
 
                 if (advNowRes.found) {
-                    AddLog(instanceId, "Ad available! Placing advertisement...", ImVec4(0, 1, 0, 1));
+                    AddLog(instanceId, Tr("Advertisement available. Publishing..."), ImVec4(0, 1, 0, 1));
                     AdbTap(instanceId, advNowRes.x, advNowRes.y);
                     adPlacedThisCycle = true; // TURN ON ADVERTISE PLACED THIS CYCLE BECAUSE BOT CAN FALSE DETECT AFTER GIVING ADVERTISEMENT AND STILL HAVE SHOP FULL.
                     // SO IF THERES AN ACTIVE ADVERTISEMENT, ALL OF THE PRODUCTS GOING TO SELL ANYWAY, NO NEED TO ENABLE SHOP FULL
@@ -1194,7 +1553,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                     MatchResult createAdRes = FindImage(adScreen, "templates\\createad.png", 0.70f, false);
                     if (createAdRes.found) {
                         AdbTap(instanceId, createAdRes.x, createAdRes.y);
-                        AddLog(instanceId, "Advertisement published!", ImVec4(0, 1, 0, 1));
+                        AddLog(instanceId, Tr("Advertisement published."), ImVec4(0, 1, 0, 1));
                         if (!SmartSleep(1000)) return;
                     }
 
@@ -1205,16 +1564,16 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                     bot.accounts[accountIndex].isShopFullStuck = false;
                     bot.accounts[accountIndex].lastAdTime = std::chrono::steady_clock::now();
 
-                    AddLog(instanceId, "Waiting 60 seconds for crops to be sold...", ImVec4(1, 0.5f, 0, 1));
+                    AddLog(instanceId, Tr("Waiting 60 seconds for crops to sell..."), ImVec4(1, 0.5f, 0, 1));
                     for (int w = 0; w < 60; w++) {
                         if (!bot.isRunning) return;
-                        bot.statusText = "Waiting Sales: " + std::to_string(60 - w) + "s";
+                        bot.statusText = std::string(Tr("Waiting for sales: ")) + std::to_string(60 - w) + "s";
                         std::this_thread::sleep_for(std::chrono::seconds(1));
                     }
                     continue;
                 }
                 else {
-                    AddLog(instanceId, "Ad on cooldown! Marking account as QUARANTINED.", ImVec4(1, 0.2f, 0.2f, 1));
+                    AddLog(instanceId, Tr("Advertisement is on cooldown. Pausing sales for this account."), ImVec4(1, 0.2f, 0.2f, 1));
                     bot.accounts[accountIndex].isShopFullStuck = true;
                     bot.accounts[accountIndex].lastShopCheckTime = std::chrono::steady_clock::now();
 
@@ -1235,7 +1594,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
 
 
             if (wasInQuarantine) {
-                AddLog(instanceId, "Quarantine lifted via empty crate! Returning to farm.", ImVec4(0, 1, 0, 1));
+                AddLog(instanceId, Tr("An empty crate is available. Resuming normal operation."), ImVec4(0, 1, 0, 1));
                 break;
             }
         }
@@ -1248,7 +1607,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
         // 3. WEBHOOK & ITEM COUNT ROUTINE.
         // =========================================================
         if (!isEmergency && doWebhook && !webhookDoneThisCycle) {
-            AddLog(instanceId, Tr("Executing Webhook Routine (Checking for Transfer)..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+            AddLog(instanceId, Tr("Checking transfer requests..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
             cv::Mat screen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
             MatchResult barnRes = FindImage(screen, barn_market_templatePath, 0.80f);
 
@@ -1350,7 +1709,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                 g_TransferRequest.itemAmount = triggeredAmount;
                 g_TransferRequest.needFriendship = !bot.accounts[accountIndex].isFriendWithStorage;
 
-                AddLog(instanceId, "RADIO: Transfer triggered! (" + std::to_string(triggeredAmount) + "x " + triggeredItem + " remaining)", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+                AddLog(instanceId, std::string(Tr("Transfer requested: ")) + std::to_string(triggeredAmount) + "x " + triggeredItem + Tr(" remaining"), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
             }
         }
 
@@ -1358,22 +1717,22 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
         if (g_TransferRequest.isPending && g_TransferRequest.senderInstanceId == instanceId) {
             // --- 1. AŞAMA: ARKADAŞLIK EL SIKIŞMASI ---
             if (g_TransferRequest.needFriendship) {
-                AddLog(instanceId, "HEIST: Not friends with storage. Initiating handshake...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+                AddLog(instanceId, Tr("Storage account is not in the friend list. Sending a request..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
 
                 if (!SendFriendRequestToStorage(instanceId, g_StorageTag)) {
-                    AddLog(instanceId, "HEIST FAILED: Could not send request.", ImVec4(1, 0, 0, 1));
+                    AddLog(instanceId, Tr("Transfer failed: Could not send the friend request."), ImVec4(1, 0, 0, 1));
                     g_TransferRequest.isPending = false; g_TransferRequest.needFriendship = false;
                     break;
                 }
 
                 g_TransferRequest.friendRequestSent = true;
-                bot.statusText = "WAITING FRIEND ACCEPT";
+                bot.statusText = Tr("WAITING FOR FRIEND REQUEST");
 
                 int waitAccept = 0;
                 while (g_TransferRequest.needFriendship && waitAccept < 600) {
                     if (!bot.isRunning) return;
                     if (!g_TransferRequest.isPending) {
-                        AddLog(instanceId, "HEIST ABORTED: Storage bot cancelled the operation!", ImVec4(1, 0, 0, 1));
+                        AddLog(instanceId, Tr("Transfer cancelled by the storage account."), ImVec4(1, 0, 0, 1));
                         break;
                     }
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -1381,7 +1740,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                 }
 
                 if (!g_TransferRequest.needFriendship) {
-                    AddLog(instanceId, "HEIST: Friendship accepted! Closing menus and re-entering shop...", ImVec4(0, 1, 0, 1));
+                    AddLog(instanceId, Tr("Friend request accepted. Reopening the shop..."), ImVec4(0, 1, 0, 1));
                     bot.accounts[accountIndex].isFriendWithStorage = true;
                     SaveConfig();
 
@@ -1401,7 +1760,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                         MatchResult shopRe = FindImage(scr, shop_templatePath, 0.75f);
 
                         if (shopRe.found) {
-                            AddLog(instanceId, "HEIST: Shop found, tapping...", ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+                            AddLog(instanceId, Tr("Shop found. Opening..."), ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
                             AdbTap(instanceId, shopRe.x, shopRe.y);
                             std::this_thread::sleep_for(std::chrono::milliseconds(2500));
 
@@ -1411,22 +1770,22 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                             MatchResult verifyCross = FindImage(verifyScr, cross_templatePath, g_Thresholds.crossThreshold);
 
                             if (verifyCrate.found || verifyCross.found) {
-                                AddLog(instanceId, "HEIST: Shop verified as open!", ImVec4(0, 1, 0, 1));
+                                AddLog(instanceId, Tr("Shop opened."), ImVec4(0, 1, 0, 1));
                                 shopOpened = true;
                                 break;
                             }
                             else {
-                                AddLog(instanceId, "HEIST: Shop didn't open. False positive or lag. Retrying...", ImVec4(1, 0.5f, 0, 1));
+                                AddLog(instanceId, Tr("Shop did not open. Retrying..."), ImVec4(1, 0.5f, 0, 1));
                             }
                         }
                         else {
-                            AddLog(instanceId, "HEIST: Shop not visible yet, waiting...", ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+                            AddLog(instanceId, Tr("Shop is not visible yet. Waiting..."), ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
                             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                         }
                     }
 
                     if (!shopOpened) {
-                        AddLog(instanceId, "HEIST ERROR: Could not verify shop is open after multiple tries!", ImVec4(1, 0, 0, 1));
+                        AddLog(instanceId, Tr("Transfer failed: The shop could not be opened."), ImVec4(1, 0, 0, 1));
                         g_TransferRequest.isPending = false;
                         break;
                     }
@@ -1442,12 +1801,12 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
             g_TransferRequest.targetSlotX = emptyCrate.x;
             g_TransferRequest.targetSlotY = emptyCrate.y;
 
-            bot.statusText = "WAITING STORAGE BOSS";
+            bot.statusText = Tr("WAITING FOR STORAGE ACCOUNT");
             int waitStorage = 0;
             while (!g_TransferRequest.storageReady && waitStorage < 600) {
                 if (!bot.isRunning) return;
                 if (!g_TransferRequest.isPending) {
-                    AddLog(instanceId, "HEIST ABORTED: Storage bot failed to infiltrate!", ImVec4(1, 0, 0, 1));
+                    AddLog(instanceId, Tr("Transfer failed: The storage account could not open the farm."), ImVec4(1, 0, 0, 1));
                     break;
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -1471,7 +1830,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                     MatchResult saleBtn = FindImage(shopScreen, create_sale_templatePath, g_Thresholds.createSaleThreshold);
                     if (saleBtn.found) {
                         AdbTap(instanceId, saleBtn.x, saleBtn.y);
-                        AddLog(instanceId, "HEIST: Item Listed! GO GO GO!", ImVec4(1, 0, 0, 1));
+                        AddLog(instanceId, Tr("Item listed. Waiting for the storage account..."), ImVec4(1, 0, 0, 1));
                         g_TransferRequest.itemListed = true;
 
 
@@ -1483,7 +1842,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                         }
 
                         if (g_TransferRequest.transferComplete) {
-                            AddLog(instanceId, "HEIST: Transfer complete. Collecting coins...", ImVec4(0, 1, 0, 1));
+                            AddLog(instanceId, Tr("Transfer completed. Collecting coins..."), ImVec4(0, 1, 0, 1));
                             AdbTap(instanceId, g_TransferRequest.targetSlotX, g_TransferRequest.targetSlotY);
                             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
@@ -1500,15 +1859,15 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                             if (inv.bolt >= g_TransferThreshold || inv.tape >= g_TransferThreshold || inv.plank >= g_TransferThreshold ||
                                 inv.nail >= g_TransferThreshold || inv.screw >= g_TransferThreshold || inv.panel >= g_TransferThreshold) {
                                 g_TransferRequest.hasMoreItems = true;
-                                AddLog(instanceId, "HEIST: I have more items! Telling Storage Bot to wait...", ImVec4(1, 1, 0, 1));
+                                AddLog(instanceId, Tr("More items remain. Keeping the storage account in the shop..."), ImVec4(1, 1, 0, 1));
                             }
                             else {
                                 g_TransferRequest.hasMoreItems = false;
-                                AddLog(instanceId, "HEIST: All items transferred. Telling Storage Bot to go home.", ImVec4(0, 1, 0, 1));
+                                AddLog(instanceId, Tr("All items were transferred. Closing the transfer session."), ImVec4(0, 1, 0, 1));
                             }
                         }
                         else {
-                            AddLog(instanceId, "HEIST ERROR: Storage bot didn't confirm receipt! (Timeout)", ImVec4(1, 0.5f, 0, 1));
+                            AddLog(instanceId, Tr("Transfer timed out while waiting for confirmation."), ImVec4(1, 0.5f, 0, 1));
                             g_TransferRequest.hasMoreItems = false; 
                         }
 
@@ -1605,7 +1964,14 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
 }
 // MAIN BOT FUNCTION. THIS FUNCTION RUNS THE ENTIRE BOT LOGIC FOR ONE INSTANCE IN A LOOP UNTIL THE BOT IS STOPPED.
 void RunPremiumBot(int instanceId) {
+    if (!RequireConfiguredEmulatorPaths(instanceId)) {
+        g_Bots[instanceId].isRunning = false;
+        g_Bots[instanceId].statusText = "PATH ERROR";
+        return;
+    }
     BotInstance& bot = g_Bots[instanceId];
+    if (!PrepareLdPlayerAdbForBot(instanceId)) return;
+
     // --- MEMUC STRICT INSPECTOR ---
     //AddLog(instanceId, "[INSPECTOR] Checking MEmu engine configuration...");
 
@@ -1629,7 +1995,7 @@ void RunPremiumBot(int instanceId) {
             SaveConfig();
         }
     }
-    AddLog(instanceId, "Waking up Minitouch agent and opening ports...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+    AddLog(instanceId, Tr("Starting Minitouch and opening the local port..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
     StartMinitouchStealth(instanceId);
 
     // WAITING 2 SECONDS FOR THE MINITOUCH TO WAKE UP PROPERLY.
@@ -1671,15 +2037,15 @@ void RunPremiumBot(int instanceId) {
                 if (elapsedMins < 2) { 
                     if (isSingleAccountMode) {
                         int waitSecs = 120 - std::chrono::duration_cast<std::chrono::seconds>(now - bot.accounts[i].lastShopCheckTime).count();
-                        AddLog(instanceId, "Single Account Quarantine: Waiting " + std::to_string(waitSecs) + "s for Ad Cooldown...", ImVec4(1, 0.5f, 0, 1));
+                        AddLog(instanceId, std::string(Tr("Waiting for the advertisement cooldown: ")) + std::to_string(waitSecs) + "s", ImVec4(1, 0.5f, 0, 1));
                         for (int w = 0; w < waitSecs; w++) {
                             if (!bot.isRunning) break;
-                            bot.statusText = "Ad Cooldown: " + std::to_string(waitSecs - w) + "s";
+                            bot.statusText = std::string(Tr("Advertisement cooldown: ")) + std::to_string(waitSecs - w) + "s";
                             std::this_thread::sleep_for(std::chrono::seconds(1));
                         }
                     }
                     else {
-                        AddLog(instanceId, "Account is in Shop Full Quarantine. Skipping to next account...", ImVec4(1, 0.2f, 0.2f, 1));
+                        AddLog(instanceId, Tr("Shop is full for this account. Moving to the next account..."), ImVec4(1, 0.2f, 0.2f, 1));
                         continue; 
                     }
                 }
@@ -1740,7 +2106,7 @@ void RunPremiumBot(int instanceId) {
             if (isSingleAccountMode) {
                 gameLoaded = true; // ACCEPTING THE GAME IS OPEN ALREADY.
                 if (bot.accounts[i].isFirstRun) {
-                    AddLog(instanceId, "Single Account Mode: Skipping Mailbox scan, starting immediately!", ImVec4(0, 1, 0, 1));
+                    AddLog(instanceId, Tr("Single-account mode. Starting immediately..."), ImVec4(0, 1, 0, 1));
                 }
             }
             else {
@@ -1798,7 +2164,7 @@ void RunPremiumBot(int instanceId) {
                         SaveConfig();
                     }
                     else {
-                        AddLog(instanceId, "Warning: Profile screen not loaded properly, skipping tag extraction.", ImVec4(1, 0.5f, 0, 1));
+                        AddLog(instanceId, Tr("Profile screen did not load correctly. Player tag was skipped."), ImVec4(1, 0.5f, 0, 1));
                     }
 
                     AdbTap(instanceId, 595, 45);
@@ -1807,18 +2173,18 @@ void RunPremiumBot(int instanceId) {
             }
            
             if (bot.accounts[i].isShopFullStuck) {
-                bot.statusText = "Checking Ad Availability...";
-                AddLog(instanceId, "Account in quarantine. Checking shop immediately to clear status...", ImVec4(1, 0.5f, 0, 1));
+                bot.statusText = Tr("Checking advertisement availability...");
+                AddLog(instanceId, Tr("Sales are paused for this account. Checking the shop..."), ImVec4(1, 0.5f, 0, 1));
 
              
                 RunSalesCycle(instanceId, i, true);
 
                 if (bot.accounts[i].isShopFullStuck) {
-                    AddLog(instanceId, "Still on Ad cooldown. Returning to quarantine...", ImVec4(1, 0.2f, 0.2f, 1));
+                    AddLog(instanceId, Tr("Advertisement is still on cooldown. Sales remain paused."), ImVec4(1, 0.2f, 0.2f, 1));
                     continue; 
                 }
                 else {
-                    AddLog(instanceId, "Quarantine lifted! Resuming normal farm operations.", ImVec4(0, 1, 0, 1));
+                    AddLog(instanceId, Tr("Advertisement is available. Resuming normal operation."), ImVec4(0, 1, 0, 1));
                 }
             }
             bool outOfSeeds = false;
@@ -1879,7 +2245,7 @@ void RunPremiumBot(int instanceId) {
                     cv::Mat siloScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                     MatchResult siloFullRes = FindImage(siloScreen, "templates\\silo_full.png", 0.75f, false);
                     if (siloFullRes.found) {
-                        AddLog(instanceId, Tr("SILO FULL DETECTED! Harvest interrupted."), ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
+                        AddLog(instanceId, Tr("Silo is full. Harvest paused."), ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
                         MatchResult crossRes = FindImage(siloScreen, silo_full_cross_templatePath, g_Thresholds.siloFullCrossThreshold, false);
                         if (crossRes.found) AdbTap(instanceId, crossRes.x, crossRes.y);
                         else AdbTap(instanceId, siloFullRes.x, siloFullRes.y);
@@ -2145,7 +2511,7 @@ void RunPremiumBot(int instanceId) {
                         tempAnchorX = allFields[0].x;
                         tempAnchorY = allFields[0].y;
 
-                        AddLog(instanceId, std::string(Tr("Neon pink fields detected! Opening seed menu (Swipe ")) + std::to_string(plantAttempt) + "/3)...", ImVec4(1.0f, 0.0f, 0.6f, 1.0f));
+                        AddLog(instanceId, std::string(Tr("Fields detected. Opening the seed menu: swipe ")) + std::to_string(plantAttempt) + "/3", ImVec4(1.0f, 0.0f, 0.6f, 1.0f));
 
 						// TAP THE FIRST FIELD TO OPEN SEED MENU
                         AdbTap(instanceId, tempAnchorX, tempAnchorY);
@@ -2155,7 +2521,7 @@ void RunPremiumBot(int instanceId) {
                         MatchResult seedRes = FindImage(screen, currentSeedTemplate, currentSeedThresh, false);
 
                         if (seedRes.found) {
-                            AddLog(instanceId, Tr("Seed Found. Executing dense grid..."), ImVec4(0, 1, 0, 1));
+                            AddLog(instanceId, Tr("Seed found. Planting..."), ImVec4(0, 1, 0, 1));
 
                             ExecuteDenseGridGesture(instanceId, seedRes.x, seedRes.y, allFields);
                             std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.afterPlantWait));
@@ -2167,7 +2533,7 @@ void RunPremiumBot(int instanceId) {
                             MatchResult crossRes = FindImage(verifyScreen, cross_templatePath, g_Thresholds.crossThreshold, false);
 
                             if (crossRes.found) {
-                                AddLog(instanceId, Tr("OUT OF SEEDS! Diamond pop-up detected. Skipping plant phase."), ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
+                                AddLog(instanceId, Tr("Out of seeds. Diamond dialog detected; skipping planting."), ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
                                 AdbTap(instanceId, crossRes.x, crossRes.y);
                                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                                 outOfSeeds = true; 
@@ -2210,7 +2576,7 @@ void RunPremiumBot(int instanceId) {
             // SILO FULL CONTROL
             // =========================================================================
             if (harvestStatus == 2) {
-                AddLog(instanceId, Tr("SILO FULL! Executing Emergency Protocol (Plant -> Sell -> Harvest)..."), ImVec4(1.0f, 0.5f, 0.0f, 1.0f));
+                AddLog(instanceId, Tr("Silo is full. Planting, selling, then resuming harvest..."), ImVec4(1.0f, 0.5f, 0.0f, 1.0f));
 
                 bot.statusText = Tr("Emergency Plant...");
                 TryPlant(); // PLANT EMPTY FIELDS AGAIN SO BOT DOESNT SELL EVERYTHING AND END UP WITH 0 SEEDS.
@@ -2271,7 +2637,7 @@ void RunPremiumBot(int instanceId) {
                 bot.accounts[i].currentCyclesWithoutSale++;
 
                 if (bot.accounts[i].currentCyclesWithoutSale >= bot.accounts[i].targetCyclesBeforeSale) {
-                    AddLog(instanceId, std::string(Tr("Random Sales Triggered! (")) + std::to_string(bot.accounts[i].currentCyclesWithoutSale) + "/" + std::to_string(bot.accounts[i].targetCyclesBeforeSale) + ")", ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
+                    AddLog(instanceId, std::string(Tr("Random sale cycle started: ")) + std::to_string(bot.accounts[i].currentCyclesWithoutSale) + "/" + std::to_string(bot.accounts[i].targetCyclesBeforeSale), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
                     bot.statusText = Tr("Checking Sales...");
                     RunSalesCycle(instanceId, i, false);
 
@@ -2279,7 +2645,7 @@ void RunPremiumBot(int instanceId) {
                     bot.accounts[i].targetCyclesBeforeSale = (rand() % 3) + 1;
                 }
                 else {
-                    AddLog(instanceId, std::string(Tr("Skipping Sales to mimic human behavior... (")) + std::to_string(bot.accounts[i].currentCyclesWithoutSale) + "/" + std::to_string(bot.accounts[i].targetCyclesBeforeSale) + ")", ImVec4(0.5f, 0.7f, 0.5f, 1.0f));
+                    AddLog(instanceId, std::string(Tr("Skipping this sale cycle: ")) + std::to_string(bot.accounts[i].currentCyclesWithoutSale) + "/" + std::to_string(bot.accounts[i].targetCyclesBeforeSale), ImVec4(0.5f, 0.7f, 0.5f, 1.0f));
                     bot.statusText = Tr("Skipped Sales (Random)");
                 }
             }
@@ -2297,40 +2663,40 @@ void RunPremiumBot(int instanceId) {
             bot.currentJanitorCycles++;
 
             if (bot.currentJanitorCycles >= bot.janitorLimit) {
-                bot.statusText = "JANITOR: DEEP CLEANING RAM...";
-                AddLog(instanceId, "[JANITOR] Cycle limit (" + std::to_string(bot.janitorLimit) + ") reached! Halting operations for Deep Clean...", ImVec4(0, 1, 1, 1));
+                bot.statusText = Tr("MAINTENANCE: PAUSING BOT...");
+                AddLog(instanceId, std::string(Tr("Maintenance interval reached after ")) + std::to_string(bot.janitorLimit) + Tr(" cycles. Pausing the bot..."), ImVec4(0, 1, 1, 1));
 
                 // CLOSE THE GAME 
                 RunAdbCommand(instanceId, "shell am force-stop com.supercell.hayday");
                 std::this_thread::sleep_for(std::chrono::seconds(2));
 
                 // 2. CLOSE EMULATOR
-                AddLog(instanceId, "[JANITOR] Shutting down emulator to flush Memory Leaks...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+                AddLog(instanceId, Tr("Restarting the emulator to release memory..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
 
                 // --- LDPLAYER & MEMU CHECK ---
                 if (bot.emulatorType == 1) { // LDPLAYER
-                    RunCmdHidden("cmd.exe /c \"\"" + kLDConsolePath + "\" quit --index " + std::to_string(bot.emuIndex) + "\"");
+                    RunCmdHidden("cmd.exe /c \"\"" + kMEmuConsolePath + "\" quit --index " + std::to_string(bot.emuIndex) + "\"");
                 }
                 else { // MEMU
                     RunCmdHidden("cmd.exe /c \"\"" + kMEmuConsolePath + "\" stop " + bot.vmName + "\"");
                 }
 
 				// 10 SECONDS WAIT FOR EMULATOR TO PROPERLY SHUT DOWN AND FLUSH RAM (BECAUSE JUST KILLING THE PROCESS DOESNT FLUSH RAM, YOU HAVE TO PROPERLY SHUT IT DOWN)
-                bot.statusText = "JANITOR: FLUSHING WINDOWS RAM...";
+                bot.statusText = Tr("MAINTENANCE: RELEASING MEMORY...");
                 std::this_thread::sleep_for(std::chrono::seconds(10));
 
                 // 3. FRESH START THE EMULATOR
-                AddLog(instanceId, "[JANITOR] Booting up a fresh emulator instance...", ImVec4(0, 1, 0, 1));
+                AddLog(instanceId, Tr("Starting the emulator after maintenance..."), ImVec4(0, 1, 0, 1));
 
                 // --- LDPLAYER & MEMU CONTROL ---
                 if (bot.emulatorType == 1) { // LDPLAYER
-                    RunCmdHidden("cmd.exe /c \"\"" + kLDConsolePath + "\" launch --index " + std::to_string(bot.emuIndex) + "\"");
+                    RunCmdHidden("cmd.exe /c \"\"" + kMEmuConsolePath + "\" launch --index " + std::to_string(bot.emuIndex) + "\"");
                 }
                 else { // MEMU
                     RunCmdHidden("cmd.exe /c \"\"" + kMEmuConsolePath + "\" start " + bot.vmName + "\"");
                 }
                 //WAIT OR ANDROID TO WAKE UP PROPERLY.
-                bot.statusText = "JANITOR: BOOTING ANDROID OS...";
+                bot.statusText = Tr("MAINTENANCE: STARTING EMULATOR...");
                 for (int w = 0; w < 35; w++) {
                     if (!bot.isRunning) break;
                     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -2338,17 +2704,17 @@ void RunPremiumBot(int instanceId) {
 
                 // 4. START MINITOUCH BECAUSE WE RESTARTED THE AGENT AND NEED TO WAKE UP AGAIN.
                 if (bot.isRunning) {
-                    bot.statusText = "JANITOR: INJECTING AGENTS...";
-                    AddLog(instanceId, "[JANITOR] Re-injecting Minitouch input agent...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+                    bot.statusText = Tr("MAINTENANCE: STARTING MINITOUCH...");
+                    AddLog(instanceId, Tr("Restarting Minitouch..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
                     StartMinitouchStealth(instanceId);
                     std::this_thread::sleep_for(std::chrono::seconds(2));
                 }
 
                 bot.currentJanitorCycles = 0; //CLEANING IS DONE,RESET TTIMER.
-                AddLog(instanceId, "[JANITOR] System completely refreshed! Resuming normal operations.", ImVec4(0, 1, 0, 1));
+                AddLog(instanceId, Tr("Maintenance completed. Resuming normal operation."), ImVec4(0, 1, 0, 1));
             }
             else {
-                AddLog(instanceId, "[JANITOR] Cycles until next deep clean: " + std::to_string(bot.janitorLimit - bot.currentJanitorCycles), ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+                AddLog(instanceId, std::string(Tr("Cycles until next maintenance: ")) + std::to_string(bot.janitorLimit - bot.currentJanitorCycles), ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
             }
         }
         if (!isSingleAccountMode) {
@@ -2435,7 +2801,7 @@ bool NXRTH_Radar(int instanceId, std::string targetName, int mode, bool skipMenu
     else roi = cv::Rect(170, 251, 194, 140);
 
     int whiteMin = 200;
-    AddLog(instanceId, "RADAR: Initializing System...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+    AddLog(instanceId, Tr("Starting account scan..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
 
 
     if (!skipMenuOpen) {
@@ -2457,21 +2823,21 @@ bool NXRTH_Radar(int instanceId, std::string targetName, int mode, bool skipMenu
         }
     }
     else {
-        AddLog(instanceId, "RADAR: Skipping menu open, already inside Friend Book.", ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+        AddLog(instanceId, Tr("Friend book is already open."), ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
     }
 
     if (mode == 0) {
-        AddLog(instanceId, "RADAR: Mode 0 Active. Switching to 'In-game friends' tab...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+        AddLog(instanceId, Tr("Opening the in-game friends tab..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
         AdbTap(instanceId, 280, 117);
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
         AdbTap(instanceId, 280, 117); 
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
     else {
-        AddLog(instanceId, "RADAR: Mode 1 Active. Scanning 'Requests' tab...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+        AddLog(instanceId, Tr("Scanning the friend requests tab..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
     }
 
-    AddLog(instanceId, "RADAR: Scanning for -> [" + targetName + "]...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+    AddLog(instanceId, std::string(Tr("Searching for account: ")) + targetName, ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
 
     for (int scanTry = 1; scanTry <= 10; scanTry++) {
         if (!bot.isRunning) return false;
@@ -2531,7 +2897,7 @@ bool NXRTH_Radar(int instanceId, std::string targetName, int mode, bool skipMenu
 
                         if (mode == 0) {
 							// DOUBLE CLICK TO VISIT FARM.
-                            AddLog(instanceId, "RADAR: Target found! Double clicking: [" + readName + "]", ImVec4(0, 1, 0, 1));
+                            AddLog(instanceId, std::string(Tr("Account found. Opening: ")) + readName, ImVec4(0, 1, 0, 1));
                             AdbTap(instanceId, clickX, clickY);
                             std::this_thread::sleep_for(std::chrono::milliseconds(100));
                             AdbTap(instanceId, clickX, clickY);
@@ -2539,14 +2905,14 @@ bool NXRTH_Radar(int instanceId, std::string targetName, int mode, bool skipMenu
                         }
                         else if (mode == 1) {
                             // ACCEPT FRIEND REQUEST
-                            AddLog(instanceId, "RADAR: Request found! Scanning for green tick on the same row...", ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
+                            AddLog(instanceId, Tr("Friend request found. Looking for the accept button..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
 
                             std::vector<MatchResult> greenTicks = FindAllImages(screen, "templates\\acceptfq.png", 0.70f, 10, false);
                             bool tickFound = false;
 
                             for (auto& tick : greenTicks) {
                                 if (std::abs(tick.y - clickY) <= 40) {
-                                    AddLog(instanceId, "RADAR: Green tick matched with name! Accepting...", ImVec4(0, 1, 0, 1));
+                                    AddLog(instanceId, Tr("Accepting the friend request..."), ImVec4(0, 1, 0, 1));
                                     AdbTap(instanceId, tick.x, tick.y);
 									std::this_thread::sleep_for(std::chrono::milliseconds(100));
 									AdbTap(instanceId, tick.x, tick.y); // ACCEPT BY DOUBLE CLICKING GREEN TICK.
@@ -2556,7 +2922,7 @@ bool NXRTH_Radar(int instanceId, std::string targetName, int mode, bool skipMenu
                             }
 
                             if (!tickFound) {
-                                AddLog(instanceId, "RADAR ERROR: Name found but acceptfq.png missing on that row!", ImVec4(1, 0.3f, 0.3f, 1.0f));
+                                AddLog(instanceId, Tr("Friend request found, but the accept button was not detected."), ImVec4(1, 0.3f, 0.3f, 1.0f));
                                 AdbTap(instanceId, clickX + 230, clickY); // Fallback: CLICK TO THE POSITION.
                             }
                             found = true;
@@ -2578,18 +2944,18 @@ bool NXRTH_Radar(int instanceId, std::string targetName, int mode, bool skipMenu
             return true;
         }
 
-        AddLog(instanceId, "RADAR: Target not found here. Scrolling 50 pixels down...", ImVec4(1, 1, 0, 1));
+        AddLog(instanceId, Tr("Account not visible yet. Scrolling..."), ImVec4(1, 1, 0, 1));
         RunAdbCommand(instanceId, "shell input swipe 300 350 300 300 1000");
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
     }
 
-    AddLog(instanceId, "RADAR ERROR: Target [" + targetName + "] not found!", ImVec4(1, 0.2f, 0.2f, 1));
+    AddLog(instanceId, std::string(Tr("Account not found: ")) + targetName, ImVec4(1, 0.2f, 0.2f, 1));
     return false;
 }
 
 void RunStorageMaster(int instanceId) {
     BotInstance& bot = g_Bots[instanceId];
-    AddLog(instanceId, "Storage Master is online. Waiting for signals...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+    AddLog(instanceId, Tr("Storage account is online. Waiting for transfer requests..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
     if (strcmp(bot.inputDevice, "/dev/input/event1") == 0) {
         if (AutoDetectTouchDevice(instanceId)) {
             SaveConfig();
@@ -2603,11 +2969,11 @@ void RunStorageMaster(int instanceId) {
 
 
             if (g_TransferRequest.needFriendship && g_TransferRequest.friendRequestSent) {
-                bot.statusText = "ACCEPTING FRIEND REQUEST";
-                AddLog(instanceId, "Friend request signal received. Accepting...", ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
+                bot.statusText = Tr("ACCEPTING FRIEND REQUEST");
+                AddLog(instanceId, Tr("Friend request received. Accepting..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
 
                 if (NXRTH_Radar(instanceId, g_TransferRequest.sellerFarmName, 1, false)) {
-                    AddLog(instanceId, "Friend request accepted! Moving directly to infiltration...", ImVec4(0, 1, 0, 1));
+                    AddLog(instanceId, Tr("Friend request accepted. Opening the farm..."), ImVec4(0, 1, 0, 1));
 
                 
                     g_TransferRequest.needFriendship = false;
@@ -2625,8 +2991,8 @@ void RunStorageMaster(int instanceId) {
 
            
             if (!g_TransferRequest.needFriendship) {
-                AddLog(instanceId, "SIGNAL RECEIVED! Target: [" + g_TransferRequest.sellerFarmName + "]", ImVec4(1, 1, 0, 1));
-                bot.statusText = "INFILTRATING: " + g_TransferRequest.sellerFarmName;
+                AddLog(instanceId, std::string(Tr("Transfer request received from: ")) + g_TransferRequest.sellerFarmName, ImVec4(1, 1, 0, 1));
+                bot.statusText = std::string(Tr("OPENING FARM: ")) + g_TransferRequest.sellerFarmName;
 
                 if (NXRTH_Radar(instanceId, g_TransferRequest.sellerFarmName, 0, friendMenuOpen)) {
                     friendMenuOpen = false; 
@@ -2654,7 +3020,7 @@ void RunStorageMaster(int instanceId) {
                     }
 
                     if (shopVerified) {
-                        AddLog(instanceId, "Entered the shop. Initiating Heist Session...", ImVec4(0, 1, 1, 1));
+                        AddLog(instanceId, Tr("Shop opened. Starting the transfer..."), ImVec4(0, 1, 1, 1));
 
                     
                         
@@ -2670,23 +3036,23 @@ void RunStorageMaster(int instanceId) {
                             }
 
                             if (g_TransferRequest.itemListed) {
-                                AddLog(instanceId, "ITEM LISTED! Waiting 800ms for network sync...", ImVec4(1, 1, 0, 1));
+                                AddLog(instanceId, Tr("Item listed. Waiting for synchronization..."), ImVec4(1, 1, 0, 1));
                                 std::this_thread::sleep_for(std::chrono::milliseconds(800));
 
                                 int visitorX = g_TransferRequest.targetSlotX + 30; 
                                 int visitorY = g_TransferRequest.targetSlotY;
 
-                                AddLog(instanceId, "TARGET LOCKED! Applying +30 X Offset & Executing Snipe...", ImVec4(1, 0, 0, 1));
+                                AddLog(instanceId, Tr("Item detected. Collecting..."), ImVec4(1, 0, 0, 1));
 
                                 for (int spam = 0; spam < 15; spam++) {
                                     AdbTap(instanceId, visitorX, visitorY);
                                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                                 }
 
-                                AddLog(instanceId, "Heist Successful! Item secured.", ImVec4(0, 1, 0, 1));
+                                AddLog(instanceId, Tr("Item collected successfully."), ImVec4(0, 1, 0, 1));
                             }
                             else {
-                                AddLog(instanceId, "Heist Failed! Seller didn't list item (Timeout).", ImVec4(1, 0.5f, 0, 1));
+                                AddLog(instanceId, Tr("Transfer timed out because the item was not listed."), ImVec4(1, 0.5f, 0, 1));
                             }
 
                             g_TransferRequest.transferComplete = true;
@@ -2700,7 +3066,7 @@ void RunStorageMaster(int instanceId) {
 
                            
                             if (g_TransferRequest.hasMoreItems) {
-                                AddLog(instanceId, "SIGNAL RECEIVED: Farm bot has more items! Waiting in shop...", ImVec4(1, 1, 0, 1));
+                                AddLog(instanceId, Tr("More items are available. Waiting in the shop..."), ImVec4(1, 1, 0, 1));
 
                                 int waitNextItem = 0;
                                 while (!g_TransferRequest.isPending && waitNextItem < 450) {
@@ -2713,12 +3079,12 @@ void RunStorageMaster(int instanceId) {
                                     continue; 
                                 }
                                 else {
-                                    AddLog(instanceId, "ERROR: Waited 45s but Farm bot got stuck. Going home.", ImVec4(1, 0, 0, 1));
+                                    AddLog(instanceId, Tr("Transfer timed out after 45 seconds. Returning home."), ImVec4(1, 0, 0, 1));
                                     break;
                                 }
                             }
                             else {
-                                AddLog(instanceId, "No more items to transfer. Finishing heist session.", ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+                                AddLog(instanceId, Tr("No more items remain. Finishing the transfer."), ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
                                 break; 
                             }
                         } 
@@ -2731,22 +3097,22 @@ void RunStorageMaster(int instanceId) {
 
                         if (homeRes.found) {
                             AdbTap(instanceId, homeRes.x, homeRes.y);
-                            AddLog(instanceId, "Returning to Home Base...", ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
+                            AddLog(instanceId, Tr("Returning home..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
                         }
                         else {
-                            AddLog(instanceId, "WARNING: home.png not found! Using fallback coordinate.", ImVec4(1, 0.5f, 0.0f, 1.0f));
+                            AddLog(instanceId, Tr("Home button was not detected. Using the fallback position."), ImVec4(1, 0.5f, 0.0f, 1.0f));
                             AdbTap(instanceId, 30, 450);
                         }
 
-                        bot.statusText = "LISTENING FOR SIGNALS";
+                        bot.statusText = Tr("WAITING FOR TRANSFER");
                     }
                     else {
-                        AddLog(instanceId, "ERROR: Shop not found or didn't open on target farm!", ImVec4(1, 0, 0, 1));
+                        AddLog(instanceId, Tr("Transfer failed: The shop was not found or did not open."), ImVec4(1, 0, 0, 1));
                         g_TransferRequest.isPending = false;
                     }
                 }
                 else {
-                    AddLog(instanceId, "ERROR: Target not found on Radar!", ImVec4(1, 0, 0, 1));
+                    AddLog(instanceId, Tr("Transfer failed: The target account was not found."), ImVec4(1, 0, 0, 1));
                     g_TransferRequest.isPending = false;
                 }
             }
@@ -2756,7 +3122,7 @@ void RunStorageMaster(int instanceId) {
 }
 
 bool SendFriendRequestToStorage(int instanceId, std::string targetTag) {
-    AddLog(instanceId, "Sending friend request to Storage (" + targetTag + ")...", ImVec4(0.5f, 0.8f, 1.0f, 1.0f));
+    AddLog(instanceId, std::string(Tr("Sending a friend request to the storage account: ")) + targetTag, ImVec4(0.5f, 0.8f, 1.0f, 1.0f));
     ForceCloseAllMenus(instanceId); 
 
   
@@ -2780,7 +3146,7 @@ bool SendFriendRequestToStorage(int instanceId, std::string targetTag) {
     }
 
     if (!friendsOpened) {
-        AddLog(instanceId, "ERROR: friends.png NOT FOUND on screen!", ImVec4(1, 0, 0, 1));
+        AddLog(instanceId, Tr("Friend button was not detected."), ImVec4(1, 0, 0, 1));
         return false;
     }
 
@@ -2815,7 +3181,7 @@ bool SendFriendRequestToStorage(int instanceId, std::string targetTag) {
     MatchResult addRes = FindImage(screen, "templates\\addfriend.png", 0.75f, false);
     if (addRes.found) {
         AdbTap(instanceId, addRes.x, addRes.y);
-        AddLog(instanceId, "Friend request sent successfully!", ImVec4(0, 1, 0, 1));
+        AddLog(instanceId, Tr("Friend request sent."), ImVec4(0, 1, 0, 1));
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 
@@ -2895,7 +3261,11 @@ std::vector<int> GetExistingMEmuInstances() {
 // THE EMULATOR FACTORY: 1-CLICK MEMU CREATOR
 // ========================================================================
 void RunEmulatorFactory(int requestedInstance) {
-    AddLog(requestedInstance, "Forging a new MEmu instance in the background... Please wait.", ImVec4(1, 1, 0, 1));
+    if (!RequireConfiguredEmulatorPaths(requestedInstance)) {
+        g_Bots[requestedInstance].isCreatingEmulator = false;
+        return;
+    }
+    AddLog(requestedInstance, Tr("Creating a new MEmu instance in the background..."), ImVec4(1, 1, 0, 1));
 
  
     std::string createOut = ExecuteMEmuCommandHidden("create");
@@ -2913,8 +3283,8 @@ void RunEmulatorFactory(int requestedInstance) {
     }
 
     if (actualVm == -1) {
-        std::string errMsg = "Failed to parse VM index!\n\n[MEMU RAW OUTPUT]:\n" + createOut;
-        MessageBoxA(NULL, errMsg.c_str(), "NXRTH - Fatal Error", MB_ICONERROR | MB_TOPMOST);
+        std::string errMsg = std::string(Tr("MEmu creation failed.\n\nRaw output:\n")) + createOut;
+        ShowLocalizedMessage(errMsg, "NXRTH - Error", MB_ICONERROR);
         g_Bots[requestedInstance].isCreatingEmulator = false;
         return;
     }
@@ -2923,8 +3293,9 @@ void RunEmulatorFactory(int requestedInstance) {
     bool didShift = false;
 
     if (targetInstance >= 6) {
-        std::string limitMsg = "You created VM " + std::to_string(actualVm) + ", but NXRTH supports max 6 instances!";
-        MessageBoxA(NULL, limitMsg.c_str(), "NXRTH - Limit Reached", MB_ICONWARNING | MB_TOPMOST);
+        std::string limitMsg = std::string(Tr("The created VM exceeds the supported limit of six instances: "))
+            + std::to_string(actualVm);
+        ShowLocalizedMessage(limitMsg, "NXRTH - Instance Limit", MB_ICONWARNING);
         g_Bots[requestedInstance].isCreatingEmulator = false;
         return;
     }
@@ -2935,10 +3306,10 @@ void RunEmulatorFactory(int requestedInstance) {
     }
 
  
-    AddLog(targetInstance, "VM created. Waiting for MEmu to unlock config files...", ImVec4(1, 1, 0, 1));
+    AddLog(targetInstance, Tr("Virtual machine created. Waiting for MEmu configuration files..."), ImVec4(1, 1, 0, 1));
     std::this_thread::sleep_for(std::chrono::seconds(2));
 
-    AddLog(targetInstance, "Applying NXRTH strict configurations (640x480, DPI 100, Root, DirectX)...", ImVec4(1, 1, 0, 1));
+    AddLog(targetInstance, Tr("Applying emulator settings (640x480, DPI 100, Root, DirectX)..."), ImVec4(1, 1, 0, 1));
     std::string vmStr = std::to_string(actualVm);
 
     ExecuteMEmuCommandHidden("setconfig -i " + vmStr + " is_customed_resolution 1");
@@ -2955,22 +3326,23 @@ void RunEmulatorFactory(int requestedInstance) {
     strncpy(g_Bots[targetInstance].vmName, vmNameStr.c_str(), 64);
 
 
-    AddLog(targetInstance, " Starting Emulator Engine...", ImVec4(0, 1, 0, 1));
+    AddLog(targetInstance, Tr("Starting the emulator..."), ImVec4(0, 1, 0, 1));
     ExecuteMEmuCommandHidden("start -i " + vmStr);
 
 
     if (didShift) {
-        std::string msg = " SMART SHIFT ALERT\n\nYou clicked 'Create' on Instance " + std::to_string(requestedInstance + 1) +
-            ", but MEmu actually created VM " + std::to_string(actualVm) +
-            ".\n\nDon't worry! NXRTH automatically linked it and moved you to the correct tab.";
-        MessageBoxA(NULL, msg.c_str(), "NXRTH - Auto Linker", MB_ICONINFORMATION | MB_TOPMOST);
+        std::string msg = std::string(Tr("MEmu created a different VM index, so NXRTH linked it automatically.\n\nRequested instance: "))
+            + std::to_string(requestedInstance + 1)
+            + Tr("\nCreated VM: ")
+            + std::to_string(actualVm);
+        ShowLocalizedMessage(msg, "NXRTH - Automatic Link", MB_ICONINFORMATION);
     }
     else {
-        std::string msg = " MEmu created successfully!\n\nTarget: VM " + std::to_string(actualVm) +
-            "\nConfig: 640x480, 100 DPI, Root, DirectX.\n\nThe emulator is booting up now.";
-        MessageBoxA(NULL, msg.c_str(), "NXRTH - Emulator Factory", MB_ICONINFORMATION | MB_TOPMOST);
+        std::string msg = std::string(Tr("MEmu was created successfully.\n\nVM index: "))
+            + std::to_string(actualVm)
+            + Tr("\nSettings: 640x480, 100 DPI, Root, DirectX.\n\nThe emulator is starting.");
+        ShowLocalizedMessage(msg, "NXRTH - Emulator Creator", MB_ICONINFORMATION);
     }
 
     g_Bots[requestedInstance].isCreatingEmulator = false;
 }
-

@@ -1,1710 +1,6199 @@
 #include "Language.h"
-#include <string>
+
+#include <array>
+#include <string_view>
+#include <unordered_map>
 #include <windows.h>
+
+namespace {
+constexpr int kLanguageCount = 10;
+constexpr int kTranslatedLanguageCount = 9;
+
+const char* const kLanguageNames[kLanguageCount] = {
+    u8"English",
+    u8"Türkçe",
+    u8"Español",
+    u8"Português",
+    u8"Русский",
+    u8"Deutsch",
+    u8"Français",
+    u8"Italiano",
+    u8"Polski",
+    u8"Nederlands",
+};
+
+struct TranslationRow {
+    const char* key;
+    std::array<const char*, kTranslatedLanguageCount> values;
+};
+
+const TranslationRow kTranslations[] = {
+    { u8"Instance ", {
+        u8"Bot ",
+        u8"Instancia ",
+        u8"Instância ",
+        u8"Экземпляр ",
+        u8"Instanz ",
+        u8"Instance ",
+        u8"Istanza ",
+        u8"Instancja ",
+        u8"Instantie ",
+    } },
+    { u8"MULTI BOT", {
+        u8"ÇOKLU BOT",
+        u8"BOT MÚLTIPLE",
+        u8"BOT MÚLTIPLO",
+        u8"МУЛЬТИБОТ",
+        u8"MULTI-BOT",
+        u8"MULTI-BOT",
+        u8"MULTI-BOT",
+        u8"MULTI-BOT",
+        u8"MULTI-BOT",
+    } },
+    { u8"Select Emulator Engine", {
+        u8"Emulator Motorunu Seçin",
+        u8"Seleccione el motor del emulador",
+        u8"Selecione o mecanismo do emulador",
+        u8"Выберите механизм эмулятора",
+        u8"Wählen Sie die Emulator-Engine aus",
+        u8"Sélectionnez le moteur d'émulateur",
+        u8"Seleziona il motore dell'emulatore",
+        u8"Wybierz silnik emulatora",
+        u8"Selecteer Emulator-engine",
+    } },
+    { u8"Load", {
+        u8"Yükle",
+        u8"Cargar",
+        u8"Carregar",
+        u8"Загрузка",
+        u8"Laden",
+        u8"Charger",
+        u8"Carica",
+        u8"Załaduj",
+        u8"Laden",
+    } },
+    { u8"Loaded template: ", {
+        u8"Yüklenen şablon: ",
+        u8"Plantilla cargada: ",
+        u8"Modelo carregado: ",
+        u8"Загруженный шаблон: ",
+        u8"Geladene Vorlage: ",
+        u8"Modèle chargé : ",
+        u8"Modello caricato: ",
+        u8"Załadowany szablon: ",
+        u8"Geladen sjabloon: ",
+    } },
+    { u8"Path is empty.", {
+        u8"Dosya yolu boş.",
+        u8"La ruta está vacía.",
+        u8"O caminho está vazio.",
+        u8"Путь не указан.",
+        u8"Der Pfad ist leer.",
+        u8"Le chemin est vide.",
+        u8"Il percorso è vuoto.",
+        u8"Ścieżka jest pusta.",
+        u8"Pad is leeg.",
+    } },
+    { u8"File not found!", {
+        u8"Dosya bulunamadı!",
+        u8"¡Archivo no encontrado!",
+        u8"Arquivo não encontrado!",
+        u8"Файл не найден!",
+        u8"Datei nicht gefunden!",
+        u8"Fichier introuvable !",
+        u8"File non trovato!",
+        u8"Nie znaleziono pliku!",
+        u8"Bestand niet gevonden!",
+    } },
+    { u8"Path must point to a file.", {
+        u8"Dosya yolu bir dosyayı göstermelidir.",
+        u8"La ruta debe apuntar a un archivo.",
+        u8"O caminho deve apontar para um arquivo.",
+        u8"Путь должен указывать на файл.",
+        u8"Der Pfad muss auf eine Datei verweisen.",
+        u8"Le chemin doit pointer vers un fichier.",
+        u8"Il percorso deve puntare a un file.",
+        u8"Ścieżka musi wskazywać plik.",
+        u8"Het pad moet naar een bestand verwijzen.",
+    } },
+    { u8"Expected executable: %s", {
+        u8"Beklenen çalıştırılabilir dosya: %s",
+        u8"Ejecutable esperado: %s",
+        u8"Executável esperado: %s",
+        u8"Ожидаемый исполняемый файл: %s",
+        u8"Erwartete ausführbare Datei: %s",
+        u8"Exécutable attendu : %s",
+        u8"Eseguibile previsto: %s",
+        u8"Oczekiwany plik wykonywalny: %s",
+        u8"Verwacht uitvoerbaar bestand: %s",
+    } },
+    { u8"ADB Executable Path:", {
+        u8"ADB.exe Dosya Yolu:",
+        u8"Ruta del ejecutable ADB:",
+        u8"Caminho do Executável ADB:",
+        u8"Путь к ADB.exe:",
+        u8"ADB.exe Pfad:",
+        u8"ADB Chemin de l'exécutable :",
+        u8"ADB Percorso eseguibile:",
+        u8"ADB Ścieżka pliku wykonywalnego:",
+        u8"ADB Uitvoerbaar pad:",
+    } },
+    { u8"LDPlayer Console Path:", {
+        u8"LDPlayer Konsol Dosya Yolu:",
+        u8"Ruta de la consola LDPlayer:",
+        u8"Caminho do Console LDPlayer:",
+        u8"Путь к консоли LDPlayer:",
+        u8"LDPlayer-Konsolenpfad:",
+        u8"LDPlayer Chemin de la console :",
+        u8"LDPlayer Percorso console:",
+        u8"LDPlayer Ścieżka konsoli:",
+        u8"LDPlayer Consolepad:",
+    } },
+    { u8"MEmu Console Path:", {
+        u8"MEmuConsole.exe Dosya Yolu:",
+        u8"Ruta de MEmu Console:",
+        u8"Caminho do Console MEmu:",
+        u8"Путь к MEmuConsole.exe:",
+        u8"MEmuConsole.exe Pfad:",
+        u8"MEmu Chemin de la console :",
+        u8"MEmu Percorso console:",
+        u8"MEmu Ścieżka konsoli:",
+        u8"MEmu Consolepad:",
+    } },
+    { u8"Action blocked: Please correct your PATHs in Settings.", {
+        u8"İşlem engellendi: Lütfen Ayarlar bölümündeki PATH'leri düzeltin.",
+        u8"Acción bloqueada: corrige las rutas en Ajustes.",
+        u8"Ação bloqueada: corrija os caminhos nas Configurações.",
+        u8"Действие заблокировано: исправьте пути в настройках.",
+        u8"Aktion blockiert: Bitte korrigiere die Pfade in den Einstellungen.",
+        u8"Action bloquée : veuillez corriger vos CHEMINS dans les paramètres.",
+        u8"Azione bloccata: correggi i tuoi PERCORSI nelle Impostazioni.",
+        u8"Akcja zablokowana: popraw ścieżki PATH w Ustawieniach.",
+        u8"Actie geblokkeerd: corrigeer uw PATH's in Instellingen.",
+    } },
+    { u8"BOT Stopped by User.", {
+        u8"BOT Kullanıcı Tarafından Durduruldu.",
+        u8"BOT Detenido por el Usuario.",
+        u8"BOT Parado pelo Usuário.",
+        u8"БОТ остановлен пользователем.",
+        u8"BOT vom Benutzer gestoppt.",
+        u8"BOT Arrêté par l'utilisateur.",
+        u8"BOT Arrestato dall'utente.",
+        u8"BOT Zatrzymany przez użytkownika.",
+        u8"BOT Gestopt door gebruiker.",
+    } },
+    { u8"Running tasks stopped because emulator paths are invalid.", {
+        u8"Emülatör dosya yolları geçersiz olduğu için çalışan işler durduruldu.",
+        u8"Las tareas activas se detuvieron porque las rutas del emulador no son válidas.",
+        u8"As tarefas ativas foram paradas porque os caminhos do emulador são inválidos.",
+        u8"Активные задачи остановлены из-за неверных путей эмулятора.",
+        u8"Laufende Aufgaben wurden wegen ungültiger Emulatorpfade gestoppt.",
+        u8"Les tâches en cours d'exécution ont été arrêtées car les chemins d'émulateur ne sont pas valides.",
+        u8"L'esecuzione delle attività è stata interrotta perché i percorsi dell'emulatore non sono validi.",
+        u8"Uruchomione zadania zostały zatrzymane, ponieważ ścieżki emulatora są nieprawidłowe.",
+        u8"Het uitvoeren van taken is gestopt omdat emulatorpaden ongeldig zijn.",
+    } },
+    { u8"Please correct your PATHs in Settings.", {
+        u8"Lütfen Ayarlar bölümündeki PATH'leri düzeltin.",
+        u8"Corrige las rutas en Ajustes.",
+        u8"Corrija os caminhos nas Configurações.",
+        u8"Исправьте пути в настройках.",
+        u8"Bitte korrigiere die Pfade in den Einstellungen.",
+        u8"Veuillez corriger vos CHEMINS dans les paramètres.",
+        u8"Correggi i tuoi PERCORSI nelle Impostazioni.",
+        u8"Popraw ścieżki PATH w Ustawieniach.",
+        u8"Corrigeer uw PATH's in Instellingen.",
+    } },
+    { u8"PATH CONFIGURATION ERROR", {
+        u8"PATH YAPILANDIRMA HATASI",
+        u8"ERROR DE CONFIGURACIÓN DE RUTAS",
+        u8"ERRO DE CONFIGURAÇÃO DE CAMINHOS",
+        u8"ОШИБКА НАСТРОЙКИ ПУТЕЙ",
+        u8"FEHLER IN DER PFADKONFIGURATION",
+        u8"ERREUR DE CONFIGURATION DU CHEMIN",
+        u8"ERRORE DI CONFIGURAZIONE DEL PERCORSO",
+        u8"BŁĄD KONFIGURACJI ŚCIEŻKI",
+        u8"PADCONFIGURATIEFOUT",
+    } },
+    { u8"Path-dependent actions are disabled until both paths are valid.", {
+        u8"İki dosya yolu da geçerli olana kadar PATH kullanan işlemler devre dışıdır.",
+        u8"Las acciones que dependen de rutas están deshabilitadas hasta que ambas sean válidas.",
+        u8"As ações que dependem dos caminhos ficam desativadas até que ambos sejam válidos.",
+        u8"Действия, зависящие от путей, отключены, пока оба пути не будут корректны.",
+        u8"Pfadabhängige Aktionen sind deaktiviert, bis beide Pfade gültig sind.",
+        u8"Les actions dépendantes du chemin sont désactivées jusqu'à ce que les both chemins soient valides.",
+        u8"Le azioni dipendenti dal percorso sono disabilitate finché i percorsi both non sono validi.",
+        u8"Akcje zależne od ścieżki są wyłączone, dopóki both ścieżek nie będzie prawidłowych.",
+        u8"Padafhankelijke acties zijn uitgeschakeld totdat both-paden geldig zijn.",
+    } },
+    { u8"OPEN SETTINGS", {
+        u8"AYARLARI AÇ",
+        u8"ABRIR AJUSTES",
+        u8"ABRIR CONFIGURAÇÕES",
+        u8"ОТКРЫТЬ НАСТРОЙКИ",
+        u8"EINSTELLUNGEN ÖFFNEN",
+        u8"OUVRIR LES PARAMÈTRES",
+        u8"IMPOSTAZIONI APERTE",
+        u8"OTWÓRZ USTAWIENIA",
+        u8"INSTELLINGEN OPENEN",
+    } },
+    { u8"STOP RUNNING TASKS", {
+        u8"ÇALIŞAN İŞLERİ DURDUR",
+        u8"DETENER TAREAS ACTIVAS",
+        u8"PARAR TAREFAS ATIVAS",
+        u8"ОСТАНОВИТЬ ЗАДАЧИ",
+        u8"LAUFENDE AUFGABEN STOPPEN",
+        u8"ARRÊTER LES TÂCHES EN EXÉCUTION",
+        u8"INTERROMPI L'ESECUZIONE DELLE ATTIVITÀ",
+        u8"ZATRZYMAJ Uruchamianie zadań",
+        u8"UITVOEREN VAN TAKEN STOPPEN",
+    } },
+    { u8"DASHBOARD", {
+        u8"KONTROL PANELİ",
+        u8"PANEL DE CONTROL",
+        u8"PAINEL DE CONTROLE",
+        u8"ПАНЕЛЬ УПРАВЛЕНИЯ",
+        u8"ARMATURENBRETT",
+        u8"TABLEAU DE BORD",
+        u8"CRUSCOTTO",
+        u8"PANEL ROZDZIELNY",
+        u8"DASHBOARD",
+    } },
+    { u8"BOT MANAGER", {
+        u8"BOT YÖNETİCİSİ",
+        u8"GESTOR DE BOTS",
+        u8"GERENCIADOR DE BOTS",
+        u8"МЕНЕДЖЕР БОТОВ",
+        u8"BOT-MANAGER",
+        u8"BOT GESTIONNAIRE",
+        u8"BOT GESTORE",
+        u8"BOT KIEROWNIK",
+        u8"BOT BEHEERDER",
+    } },
+    { u8"LOGS", {
+        u8"SİSTEM KAYITLARI",
+        u8"REGISTROS",
+        u8"REGISTROS",
+        u8"ЖУРНАЛЫ",
+        u8"PROTOKOLLE",
+        u8"JOURNAUX",
+        u8"REGISTRI",
+        u8"DZIENNIKI",
+        u8"LOGBOEK",
+    } },
+    { u8"TEMPLATES", {
+        u8"ŞABLONLAR",
+        u8"PLANTILLAS",
+        u8"MODELOS",
+        u8"ШАБЛОНЫ",
+        u8"VORLAGEN",
+        u8"MODÈLES",
+        u8"MODELLI",
+        u8"SZABLONY",
+        u8"SJABLONEN",
+    } },
+    { u8"REMOTE & WEBHOOK", {
+        u8"UZAKTAN KONTROL & BİLDİRİM",
+        u8"CONTROL REMOTO Y WEBHOOK",
+        u8"CONTROLE REMOTO E WEBHOOK",
+        u8"УДАЛЕННЫЙ КОНТРОЛЬ",
+        u8"FERNSTEUERUNG & WEBHOOK",
+        u8"TÉLÉCOMMANDE ET WEBHOOK",
+        u8"TELECOMANDO e WEBHOOK",
+        u8"ZDALNY & WEBHOOK",
+        u8"AFSTAND & WEBHOOK",
+    } },
+    { u8"SETTINGS", {
+        u8"AYARLAR",
+        u8"AJUSTES",
+        u8"CONFIGURAÇÕES",
+        u8"НАСТРОЙКИ",
+        u8"EINSTELLUNGEN",
+        u8"PARAMÈTRES",
+        u8"IMPOSTAZIONI",
+        u8"USTAWIENIA",
+        u8"INSTELLINGEN",
+    } },
+    { u8"HOW TO USE", {
+        u8"NASIL KULLANILIR",
+        u8"CÓMO UTILIZAR",
+        u8"HOW TO USE",
+        u8"КАК ИСПОЛЬЗОВАТЬ",
+        u8"ANWENDUNG",
+        u8"COMMENT UTILISER",
+        u8"COME USARE",
+        u8"JAK UŻYWAĆ",
+        u8"HOE TE GEBRUIKEN",
+    } },
+    { u8"BOT VISION", {
+        u8"BOT VİZYONU",
+        u8"VISIÓN DEL BOT",
+        u8"BOT VISION",
+        u8"ВИДЕНИЕ БОТА",
+        u8"BOT VISION",
+        u8"BOT VISION",
+        u8"BOT VISIONE",
+        u8"BOT WIZJA",
+        u8"BOT VISIE",
+    } },
+    { u8"BUG FIX / DEBUG", {
+        u8"HATA DÜZELTME / HATA AYIKLAMA",
+        u8"CORRECCIÓN DE ERRORES / DEPURACIÓN",
+        u8"CORREÇÃO DE ERRO/DEBUG",
+        u8"ИСПРАВЛЕНИЕ ОШИБКИ/ОТЛАДКА",
+        u8"FEHLERBEHEBUNG / DEBUG",
+        u8"CORRECTION DE BUG / DÉBOGAGE",
+        u8"CORREZIONE BUG/DEBUG",
+        u8"NAPRAWA BŁĘDU / DEBUGOWANIE",
+        u8"BUGFIX / DEBUG",
+    } },
+    { u8"Active Instances: %d/%d", {
+        u8"Aktif Botlar: %d/%d",
+        u8"Instancias activas: %d/%d",
+        u8"Instâncias ativas: %d/%d",
+        u8"Активные экземпляры: %d/%d",
+        u8"Aktive Instanzen: %d/%d",
+        u8"Instances actives : %d/%d",
+        u8"Istanze attive: %d/%d",
+        u8"Aktywne instancje: %d/%d",
+        u8"Actieve instanties: %d/%d",
+    } },
+    { u8"User: %s", {
+        u8"Kullanıcı: %s",
+        u8"Usuario: %s",
+        u8"Usuário: %s",
+        u8"Пользователь: %s",
+        u8"Benutzer: %s",
+        u8"Utilisateur : %s",
+        u8"Utente: %s",
+        u8"Użytkownik: %s",
+        u8"Gebruiker: %s",
+    } },
+    { u8"INSTANCES OVERVIEW", {
+        u8"GENEL BAKIŞ",
+        u8"VISIÓN GENERAL DE INSTANCIAS",
+        u8"VISÃO GERAL DAS INSTÂNCIAS",
+        u8"ОБЗОР ЭКЗЕМПЛЯРОВ",
+        u8"INSTANZEN-ÜBERSICHT",
+        u8"APERÇU DES INSTANCES",
+        u8"PANORAMICA DELLE ISTANZE",
+        u8"PRZEGLĄD INSTANCJI",
+        u8"OVERZICHT VAN INSTANCTIES",
+    } },
+    { u8"TOTAL RUNTIME", {
+        u8"TOPLAM ÇALIŞMA SÜRESİ",
+        u8"TIEMPO TOTAL DE EJECUCIÓN",
+        u8"TEMPO DE EXECUÇÃO TOTAL",
+        u8"ОБЩЕЕ ВРЕМЯ РАБОТЫ",
+        u8"GESAMTE LAUFZEIT",
+        u8"DURÉE D'EXÉCUTION TOTALE",
+        u8"TEMPO DI ESECUZIONE TOTALE",
+        u8"CAŁKOWITY CZAS PRACY",
+        u8"TOTALE RUNTIME",
+    } },
+    { u8"TOTAL HARVEST / SALES", {
+        u8"TOPLAM HASAT / SATIŞ",
+        u8"COSECHAS / VENTAS TOTALES",
+        u8"TOTAL COLHEITA / VENDAS",
+        u8"ВСЕГО СОБРАНО / ПРОДАЖ",
+        u8"GESAMTE ERNTE / VERKÄUFE",
+        u8"RÉCOLTE TOTALE / VENTES",
+        u8"RACCOLTO TOTALE/VENDITE",
+        u8"ŁĄCZNE ZBIORY / SPRZEDAŻ",
+        u8"TOTALE OOGST / VERKOOP",
+    } },
+    { u8"TOTAL COINS", {
+        u8"TOPLAM ALTIN",
+        u8"MONEDAS TOTALES",
+        u8"TOTAL DE MOEDAS",
+        u8"ВСЕГО МОНЕТ",
+        u8"GESAMTE MÜNZEN",
+        u8"TOTAL DES PIÈCES",
+        u8"TOTALE MONETE",
+        u8"OGÓŁEM MONETY",
+        u8"TOTAAL MUNTEN",
+    } },
+    { u8"TOTAL DIAMONDS", {
+        u8"TOPLAM ELMAS",
+        u8"DIAMANTES TOTALES",
+        u8"TOTAL DE DIAMANTES",
+        u8"ВСЕГО АЛМАЗОВ",
+        u8"GESAMTE DIAMANTEN",
+        u8"TOTAL DES DIAMANTS",
+        u8"TOTALE DIAMANTI",
+        u8"CAŁOŚĆ DIAMENTÓW",
+        u8"TOTAAL DIAMANTEN",
+    } },
+    { u8"INSTANCE #%d", {
+        u8"SLOT #%d",
+        u8"INSTANCIA #%d",
+        u8"INSTÂNCIA #%d",
+        u8"БОТ #%d",
+        u8"INSTANZ #%d",
+        u8"INSTANCE #%d",
+        u8"ISTANZA #%d",
+        u8"INSTANCJA #%d",
+        u8"INSTANCTIE #%d",
+    } },
+    { u8"[ONLINE]", {
+        u8"[ÇEVRİMİÇİ]",
+        u8"[EN LÍNEA]",
+        u8"[ONLINE]",
+        u8"[ОНЛАЙН]",
+        u8"[ONLINE]",
+        u8"[EN LIGNE]",
+        u8"[ONLINE]",
+        u8"[ONLINE]",
+        u8"[ONLINE]",
+    } },
+    { u8"[OFFLINE]", {
+        u8"[ÇEVRİMDIŞI]",
+        u8"[DESCONECTADO]",
+        u8"[OFFLINE]",
+        u8"[ОФФЛАЙН]",
+        u8"[OFFLINE]",
+        u8"[HORS LIGNE]",
+        u8"[OFFLINE]",
+        u8"[OFFLINE]",
+        u8"[OFFLINE]",
+    } },
+    { u8"ADB: %s", {
+        u8"ADB Portu: %s",
+        u8"Puerto ADB: %s",
+        u8"Porta ADB: %s",
+        u8"Порт ADB: %s",
+        u8"ADB Port: %s",
+        u8"ADB : %s",
+        u8"ADB: %s",
+        u8"ADB: %s",
+        u8"ADB: %s",
+    } },
+    { u8"Slot: %s", {
+        u8"Hesap: %s",
+        u8"Ranura: %s",
+        u8"Slot: %s",
+        u8"Слот: %s",
+        u8"Slot: %s",
+        u8"Emplacement : %s",
+        u8"Slot: %s",
+        u8"Gniazdo: %s",
+        u8"Slot: %s",
+    } },
+    { u8"Farm: %s | Lvl: %d", {
+        u8"Çiftlik: %s | Svy: %d",
+        u8"Granja: %s | Nivel: %d",
+        u8"Fazenda: %s | Nvl: %d",
+        u8"Ферма: %s | Ур: %d",
+        u8"Farm: %s | Lvl: %d",
+        u8"Ferme : %s | Niveau : %d",
+        u8"Azienda agricola: %s | Livello: %d",
+        u8"Gospodarstwo: %s | Poziom: %d",
+        u8"Boerderij: %s | Niveau: %d",
+    } },
+    { u8"Tag: %s", {
+        u8"Oyuncu Etiketi: %s",
+        u8"Etiqueta: %s",
+        u8"Tag: %s",
+        u8"Тег: %s",
+        u8"Tag: %s",
+        u8"Balise : %s",
+        u8"Etichetta: %s",
+        u8"Znacznik: %s",
+        u8"Label: %s",
+    } },
+    { u8"Barn: Bolt: %d | Tape: %d | Plank: %d", {
+        u8"Ambar: Cıvata: %d | Bant: %d | Kalas: %d",
+        u8"Granero: Perno: %d | Cinta: %d | Tabla: %d",
+        u8"Celeiro: Parafuso: %d | Fita: %d | Tábua: %d",
+        u8"Амбар: Болт: %d | Скотч: %d | Доска: %d",
+        u8"Scheune: Bolzen: %d | Klebeband: %d | Brett: %d",
+        u8"Grange : Boulon : %d | Bande : %d | Planche : %d",
+        u8"Fienile: Bullone: %d | Nastro: %d | Tavola: %d",
+        u8"Stodoła: Śruba: %d | Taśma: %d | Deska: %d",
+        u8"Schuur: Bout: %d | Band: %d | Plank: %d",
+    } },
+    { u8"Silo: Nail: %d | Screw: %d | Panel: %d", {
+        u8"Silo: Çivi: %d | Vida: %d | Panel: %d",
+        u8"Silo: Clavo: %d | Tornillo: %d | Panel: %d",
+        u8"Silo: Prego: %d | Parafuso: %d | Painel: %d",
+        u8"Силос: Гвоздь: %d | Винт: %d | Панель: %d",
+        u8"Silo: Nagel: %d | Schraube: %d | Platte: %d",
+        u8"Silo : Clou : %d | Vis : %d | Panneau : %d",
+        u8"Silo: Chiodo: %d | Vite: %d | Pannello: %d",
+        u8"Silos: Gwóźdź: %d | Śruba: %d | Panel: %d",
+        u8"Silo: Spijker: %d | Schroef: %d | Paneel: %d",
+    } },
+    { u8"Harvests: %d | Sales: %d", {
+        u8"Hasat Sayısı: %d | Satış Sayısı: %d",
+        u8"Cosechas: %d | Ventas: %d",
+        u8"Colheitas: %d | Vendas: %d",
+        u8"Сбор: %d | Продажи: %d",
+        u8"Ernten: %d | Verkäufe: %d",
+        u8"Récoltes : %d | Ventes : %d",
+        u8"Raccolti: %d | Vendite: %d",
+        u8"Zbiory: %d | Sprzedaż: %d",
+        u8"Oogsten: %d | Verkoop: %d",
+    } },
+    { u8"Status: %s", {
+        u8"Durum: %s",
+        u8"Estado: %s",
+        u8"Status: %s",
+        u8"Статус: %s",
+        u8"Status: %s",
+        u8"Statut : %s",
+        u8"Stato: %s",
+        u8"Stan: %s",
+        u8"Status: %s",
+    } },
+    { u8"Enable this instance in 'Bot Manager'", {
+        u8"'Bot Yöneticisi' sekmesinden bu botu aktif edin.",
+        u8"Habilite esta instancia en 'Gestor de Bots'",
+        u8"Ative esta instância em 'Gerenciador de Bots'",
+        u8"Включите этого бота в 'Менеджере ботов'",
+        u8"Aktivieren Sie diese Instanz im 'Bot-Manager'",
+        u8"Activer cette instance dans 'Bot Manager'",
+        u8"Abilita questa istanza in \"Bot Manager\"",
+        u8"Włącz tę instancję w „Bot Menedżerze”",
+        u8"Schakel deze instantie in 'Bot Manager' in",
+    } },
+    { u8"BOT INSTANCE MANAGER", {
+        u8"BOT YÖNETİM PANELİ",
+        u8"GESTOR DE INSTANCIAS DE BOTS",
+        u8"GERENCIADOR DE INSTÂNCIA DE BOT",
+        u8"МЕНЕДЖЕР ЭКЗЕМПЛЯРОВ БОТА",
+        u8"BOT-INSTANZ-MANAGER",
+        u8"BOT GESTIONNAIRE D'INSTANCE",
+        u8"BOT GESTIONE ISTANZA",
+        u8"BOT MENEDŻER INSTANCJI",
+        u8"BOT INSTANCEBEHEER",
+    } },
+    { u8"Number of Instances:", {
+        u8"Bot Sayısı:",
+        u8"Número de instancias:",
+        u8"Número de Instâncias:",
+        u8"Количество экземпляров:",
+        u8"Anzahl der Instanzen:",
+        u8"Nombre d'instances :",
+        u8"Numero di istanze:",
+        u8"Liczba instancji:",
+        u8"Aantal exemplaren:",
+    } },
+    { u8"Set", {
+        u8"Ayarla",
+        u8"Establecer",
+        u8"Set",
+        u8"Установлено",
+        u8"Eingestellt",
+        u8"Définir",
+        u8"Imposta",
+        u8"Ustaw",
+        u8"Ingesteld",
+    } },
+    { u8"(Stop all bots to change instance count)", {
+        u8"(Bot sayısını değiştirmek için tüm botları durdurun)",
+        u8"(Detenga todos los bots para cambiar el recuento de instancias)",
+        u8"(Pare todos os bots para alterar a contagem de instâncias)",
+        u8"(остановите всех ботов, чтобы изменить количество экземпляров)",
+        u8"(Alle bot stoppen, um die Instanzanzahl zu ändern)",
+        u8"(Arrêtez tous les bot pour modifier le nombre d'instances)",
+        u8"(Arresta tutti gli bot per modificare il conteggio delle istanze)",
+        u8"(Zatrzymaj wszystkie bot, aby zmienić liczbę instancji)",
+        u8"(Stop alle bots om het aantal exemplaren te wijzigen)",
+    } },
+    { u8"(1 instance = 1 emulator, max %d)", {
+        u8"(1 bot = 1 emülatör, en fazla %d)",
+        u8"(1 instancia = 1 emulador, máx. %d)",
+        u8"(1 instância = 1 emulador, máx. %d)",
+        u8"(1 экземпляр = 1 эмулятор, максимум %d)",
+        u8"(1 Instanz = 1 Emulator, max. %d)",
+        u8"(1 instance = 1 émulateur, max %d)",
+        u8"(1 istanza = 1 emulatore, massimo %d)",
+        u8"(1 instancja = 1 emulator, maks. %d)",
+        u8"(1 exemplaar = 1 emulator, max. %d)",
+    } },
+    { u8"Instance Settings", {
+        u8"Bot Ayarları",
+        u8"Configuración de instancia",
+        u8"Configurações da instância",
+        u8"Настройки экземпляра",
+        u8"Instanzeinstellungen",
+        u8"Paramètres d'instance",
+        u8"Impostazioni dell'istanza",
+        u8"Ustawienia instancji",
+        u8"Instantie-instellingen",
+    } },
+    { u8"Instance:", {
+        u8"Bot:",
+        u8"Instancia:",
+        u8"Instance:",
+        u8"Экземпляр:",
+        u8"Instanz:",
+        u8"Instance :",
+        u8"Istanza:",
+        u8"Instancja:",
+        u8"Instantie:",
+    } },
+    { u8"(pick an instance to configure)", {
+        u8"(yapılandırılacak botu seçin)",
+        u8"(elija una instancia para configurar)",
+        u8"(escolha uma instância para configurar)",
+        u8"(выберите экземпляр для настройки)",
+        u8"(Wählen Sie eine zu konfigurierende Instanz aus)",
+        u8"(choisissez une instance à configurer)",
+        u8"(scegli un'istanza da configurare)",
+        u8"(wybierz instancję do skonfigurowania)",
+        u8"(kies een exemplaar om te configureren)",
+    } },
+    { u8"CONNECTION SETTINGS", {
+        u8"BAĞLANTI AYARLARI",
+        u8"AJUSTES DE CONEXIÓN",
+        u8"CONFIGURAÇÕES DE CONEXÃO",
+        u8"НАСТРОЙКИ ПОДКЛЮЧЕНИЯ",
+        u8"VERBINDUNGSEINSTELLUNGEN",
+        u8"PARAMÈTRES DE CONNEXION",
+        u8"IMPOSTAZIONI DI CONNESSIONE",
+        u8"USTAWIENIA POŁĄCZENIA",
+        u8"VERBINDINGSINSTELLINGEN",
+    } },
+    { u8"Enable This Instance", {
+        u8"Bu Botu Çalıştır",
+        u8"Habilitar este bot",
+        u8"Ativar Este Bot",
+        u8"Включить этого бота",
+        u8"Diesen Bot aktivieren",
+        u8"Activer cette instance",
+        u8"Abilita questa istanza",
+        u8"Włącz tę instancję",
+        u8"Schakel dit exemplaar in",
+    } },
+    { u8"BOT MODE & MAINTENANCE", {
+        u8"BOT MODU VE BAKIM",
+        u8"MODO BOT Y MANTENIMIENTO",
+        u8"MODO BOT E MANUTENÇÃO",
+        u8"РЕЖИМ БОТА И ОБСЛУЖИВАНИЕ",
+        u8"BOT MODUS & WARTUNG",
+        u8"BOT MODE ET ENTRETIEN",
+        u8"BOT MODALITÀ E MANUTENZIONE",
+        u8"BOT TRYB I KONSERWACJA",
+        u8"BOT MODUS & ONDERHOUD",
+    } },
+    { u8"Enable Single Mode", {
+        u8"Tekli Modu Etkinleştir",
+        u8"Habilitar modo único",
+        u8"Ativar modo único",
+        u8"Включить одиночный режим",
+        u8"Einzelmodus aktivieren",
+        u8"Activer le mode unique",
+        u8"Abilita la modalità singola",
+        u8"Włącz tryb pojedynczy",
+        u8"Enkele modus inschakelen",
+    } },
+    { u8"Enable Multi Mode (Account rotation)", {
+        u8"Çoklu Modu Etkinleştir (Hesap döndürme)",
+        u8"Habilitar modo múltiple (rotación de cuentas)",
+        u8"Habilitar Multi Mode (rotação de conta)",
+        u8"Включить мультирежим (ротация учетных записей)",
+        u8"Enable Multi Mode (Account rotation)",
+        u8"Activer le mode multi (rotation du compte)",
+        u8"Abilita la modalità multipla (rotazione dell'account)",
+        u8"Włącz tryb Multi (rotacja konta)",
+        u8"Multi-modus inschakelen (accountrotatie)",
+    } },
+    { u8"Save at least two farms to enable this mode.", {
+        u8"Bu modu etkinleştirmek için en az iki çiftliği kaydedin.",
+        u8"Guarde al menos dos granjas para habilitar este modo.",
+        u8"Salve pelo menos dois farms para ativar este modo.",
+        u8"Сохраните как минимум две фермы, чтобы включить этот режим.",
+        u8"Speichern Sie mindestens zwei Farmen, um diesen Modus zu aktivieren.",
+        u8"Enregistrez au moins deux fermes pour activer ce mode.",
+        u8"Salva almeno due aziende agricole per abilitare questa modalità.",
+        u8"Zapisz co najmniej dwie farmy, aby włączyć ten tryb.",
+        u8"Sla minimaal twee boerderijen op om deze modus in te schakelen.",
+    } },
+    { u8"Enable Revive Mode", {
+        u8"Canlandırma Modunu Etkinleştir",
+        u8"Habilitar modo Revivir",
+        u8"Ativar modo reviver",
+        u8"Включить режим восстановления",
+        u8"Aktivieren Sie den Wiederbelebungsmodus",
+        u8"Activer le mode Réanimation",
+        u8"Abilita la modalità di ripristino",
+        u8"Włącz tryb przywracania",
+        u8"Revive-modus inschakelen",
+    } },
+    { u8"Checks the selected template periodically. The game restarts after three failed checks.", {
+        u8"Seçilen şablonu periyodik olarak kontrol eder. Oyun, üç başarısız kontrolün ardından yeniden başlar.",
+        u8"Comprueba periódicamente la plantilla seleccionada. El juego se reinicia después de tres controles fallidos.",
+        u8"Verifica periodicamente o modelo selecionado. O jogo reinicia após três verificações falhadas.",
+        u8"Периодически проверяет выбранный шаблон. Игра перезапускается после трех неудачных проверок.",
+        u8"Überprüft die ausgewählte Vorlage regelmäßig. Nach drei fehlgeschlagenen Prüfungen beginnt das Spiel erneut.",
+        u8"Vérifie périodiquement le modèle sélectionné. Le jeu redémarre après trois contrôles ratés.",
+        u8"Controlla periodicamente il modello selezionato. Il gioco riprende dopo tre controlli falliti.",
+        u8"Sprawdza okresowo wybrany szablon. Gra rozpoczyna się od nowa po trzech nieudanych testach.",
+        u8"Controleert periodiek de geselecteerde sjabloon. Het spel wordt opnieuw gestart na drie mislukte controles.",
+    } },
+    { u8"Check Interval (seconds)", {
+        u8"Kontrol Aralığı (saniye)",
+        u8"Intervalo de verificación (segundos)",
+        u8"Intervalo de verificação (segundos)",
+        u8"Интервал проверки (секунды)",
+        u8"Prüfintervall (Sekunden)",
+        u8"Intervalle de vérification (secondes)",
+        u8"Intervallo di controllo (secondi)",
+        u8"Interwał sprawdzania (sekundy)",
+        u8"Controle-interval (seconden)",
+    } },
+    { u8"Custom Template", {
+        u8"Özel Şablon",
+        u8"Plantilla personalizada",
+        u8"Modelo personalizado",
+        u8"Пользовательский шаблон",
+        u8"Benutzerdefinierte Vorlage",
+        u8"Modèle personnalisé",
+        u8"Modello personalizzato",
+        u8"Szablon niestandardowy",
+        u8"Aangepaste sjabloon",
+    } },
+    { u8"Browse##revive", {
+        u8"Gözat##revive",
+        u8"Explorar##revive",
+        u8"Browse##revive",
+        u8"Обзор##revive",
+        u8"Durchsuchen##revive",
+        u8"Parcourir##revive",
+        u8"Sfoglia##revive",
+        u8"Przeglądaj##revive",
+        u8"Bladeren##revive",
+    } },
+    { u8"AUTOMATIC MAINTENANCE", {
+        u8"OTOMATİK BAKIM",
+        u8"MANTENIMIENTO AUTOMATICO",
+        u8"MANUTENÇÃO AUTOMÁTICA",
+        u8"АВТОМАТИЧЕСКОЕ ОБСЛУЖИВАНИЕ",
+        u8"AUTOMATISCHE WARTUNG",
+        u8"ENTRETIEN AUTOMATIQUE",
+        u8"MANUTENZIONE AUTOMATICA",
+        u8"KONSERWACJA AUTOMATYCZNA",
+        u8"AUTOMATISCH ONDERHOUD",
+    } },
+    { u8"Enable Automatic RAM & Cache Cleanup", {
+        u8"Otomatik RAM ve Önbellek Temizlemeyi Etkinleştir",
+        u8"Habilitar RAM automática y limpieza de caché",
+        u8"Ativar RAM automática e limpeza de cache",
+        u8"Включить автоматическую RAM и очистку кэша",
+        u8"Aktivieren Sie die automatische RAM- und Cache-Bereinigung",
+        u8"Activer RAM et le nettoyage automatique du cache",
+        u8"Abilita RAM automatico e pulizia cache",
+        u8"Włącz automatyczne RAM i czyszczenie pamięci podręcznej",
+        u8"Automatische RAM en cache-opschoning inschakelen",
+    } },
+    { u8"Restarts the emulator after the selected number of cycles to release memory.", {
+        u8"Belleği serbest bırakmak için seçilen sayıda döngüden sonra öykünücüyü yeniden başlatır.",
+        u8"Reinicia el emulador después del número de ciclos seleccionado para liberar memoria.",
+        u8"Reinicia o emulador após o número selecionado de ciclos para liberar memória.",
+        u8"Перезапускает эмулятор после выбранного количества циклов для освобождения памяти.",
+        u8"Restarts the emulator after the selected number of cycles to release memory.",
+        u8"Redémarre l'émulateur après le nombre de cycles sélectionné pour libérer de la mémoire.",
+        u8"Riavvia l'emulatore dopo il numero di cicli selezionato per liberare memoria.",
+        u8"Restartuje emulator po wybranej liczbie cykli w celu zwolnienia pamięci.",
+        u8"Start de emulator opnieuw na het geselecteerde aantal cycli om geheugen vrij te maken.",
+    } },
+    { u8"Cleanup Interval (cycles)", {
+        u8"Temizleme Aralığı (döngü)",
+        u8"Intervalo de limpieza (ciclos)",
+        u8"Intervalo de limpeza (ciclos)",
+        u8"Интервал очистки (циклы)",
+        u8"Bereinigungsintervall (Zyklen)",
+        u8"Intervalle de nettoyage (cycles)",
+        u8"Intervallo di pulizia (cicli)",
+        u8"Interwał czyszczenia (cykle)",
+        u8"Opruiminterval (cycli)",
+    } },
+    { u8"(Target Port: %s)", {
+        u8"(Hedef Port: %s)",
+        u8"(Puerto destino: %s)",
+        u8"(Porta de destino: %s)",
+        u8"(Целевой порт: %s)",
+        u8"(Zielport: %s)",
+        u8"(Port cible : %s)",
+        u8"(Porta di destinazione: %s)",
+        u8"(Port docelowy: %s)",
+        u8"(Doelpoort: %s)",
+    } },
+    { u8"Example: 127.0.0.1:21503 for MEmu 1", {
+        u8"Örnek: MEmu 1 için 127.0.0.1:21503",
+        u8"Ejemplo: 127.0.0.1:21503 para MEmu 1",
+        u8"Exemplo: 127.0.0.1:21503 para MEmu 1",
+        u8"Пример: 127.0.0.1:21503 для MEmu 1",
+        u8"Beispiel: 127.0.0.1:21503 für MEmu 1",
+        u8"Exemple : 127.0.0.1:21503 pour MEmu 1",
+        u8"Esempio: 127.0.0.1:21503 per MEmu 1",
+        u8"Przykład: 127.0.0.1:21503 dla MEmu 1",
+        u8"Voorbeeld: 127.0.0.1:21503 voor MEmu 1",
+    } },
+    { u8"Input Device (Touchscreen):", {
+        u8"Giriş Aygıtı (Dokunmatik):",
+        u8"Dispositivo de entrada (Táctil):",
+        u8"Dispositivo de Entrada (Tela Touch):",
+        u8"Устройство ввода (Сенсор):",
+        u8"Eingabegerät (Touchscreen):",
+        u8"Périphérique d'entrée (écran tactile) :",
+        u8"Dispositivo di input (touchscreen):",
+        u8"Urządzenie wejściowe (ekran dotykowy):",
+        u8"Invoerapparaat (touchscreen):",
+    } },
+    { u8"Don't have an emulator?", {
+        u8"Emülatörünüz yok mu?",
+        u8"¿No tienes un emulador?",
+        u8"Não tem um emulador?",
+        u8"У вас нет эмулятора?",
+        u8"Sie haben keinen Emulator?",
+        u8"Vous n'avez pas d'émulateur ?",
+        u8"Non hai un emulatore?",
+        u8"Nie masz emulatora?",
+        u8"Heeft u geen emulator?",
+    } },
+    { u8" CREATING... (~20s)", {
+        u8" OLUŞTURUYOR... (~20s)",
+        u8" CREANDO... (~20s)",
+        u8" CRIANDO... (~20s)",
+        u8" СОЗДАНИЕ... (~20 с)",
+        u8" ERSTELLEN... (~20s)",
+        u8" CRÉATION... (~20s)",
+        u8" CREAZIONE... (~20 s)",
+        u8" TWORZENIE... (~20 s)",
+        u8" MAKEN... (~ 20s)",
+    } },
+    { u8" CREATE NEW MEMU\n& AUTO-LINK", {
+        u8" YENİ MEMU OLUŞTUR\nVE OTOMATİK BAĞLA",
+        u8" CREAR NUEVO MEMU\nY ENLACE AUTOMÁTICO",
+        u8" CRIAR NOVO MEMU\n& LINK AUTOMÁTICO",
+        u8" СОЗДАТЬ НОВЫЙ MEMU\n И АВТО-ССЫЛКУ",
+        u8" NEUES MEMU\n & AUTO-LINK ERSTELLEN",
+        u8" CRÉER UN NOUVEAU MEMU\n& AUTO-LINK",
+        u8" CREA NUOVO MEMU\nE COLLEGAMENTO AUTOMATICO",
+        u8" UTWÓRZ NOWE MEMU\n& AUTO-LINK",
+        u8" MAAK NIEUW MEMU\n& AUTO-LINK",
+    } },
+    { u8"TOOLS & DIAGNOSTICS", {
+        u8"ARAÇLAR & TESTLER",
+        u8"HERRAMIENTAS Y PRUEBAS",
+        u8"FERRAMENTAS E TESTES",
+        u8"ИНСТРУМЕНТЫ И ТЕСТЫ",
+        u8"WERKZEUGE & TESTS",
+        u8"OUTILS & DIAGNOSTIC",
+        u8"TOOLS & DIAGNOSTICS",
+        u8"NARZĘDZIA I DIAGNOSTYKA",
+        u8"GEREEDSCHAP & DIAGNOSE",
+    } },
+    { u8"Select Mode:", {
+        u8"Ekim Modu Seçin:",
+        u8"Modo de cultivo:",
+        u8"Selecionar Modo:",
+        u8"Выберите режим:",
+        u8"Erntemodus wählen:",
+        u8"Mode de sélection :",
+        u8"Seleziona modalità:",
+        u8"Wybierz tryb:",
+        u8"Selecteer modus:",
+    } },
+    { u8"Wheat (2m)", {
+        u8"Buğday (2dk)",
+        u8"Trigo (2m)",
+        u8"Trigo (2m)",
+        u8"Пшеница (2м)",
+        u8"Weizen (2m)",
+        u8"Blé (2m)",
+        u8"Grano (2m)",
+        u8"Pszenica (2m)",
+        u8"Tarwe (2m)",
+    } },
+    { u8"Corn (5m)", {
+        u8"Mısır (5dk)",
+        u8"Maíz (5m)",
+        u8"Milho (5m)",
+        u8"Кукуруза (5м)",
+        u8"Mais (5m)",
+        u8"Maïs (5m)",
+        u8"Mais (5m)",
+        u8"Kukurydza (5m)",
+        u8"Maïs (5m)",
+    } },
+    { u8"Carrot (10m)", {
+        u8"Havuç (10dk)",
+        u8"Zanahoria (10m)",
+        u8"Cenoura (10m)",
+        u8"Морковь (10m)",
+        u8"Karotte (10m)",
+        u8"Carotte (10m)",
+        u8"Carota (10m)",
+        u8"Marchew (10m)",
+        u8"Wortel (10m)",
+    } },
+    { u8"Soybean (20m)", {
+        u8"Soya Fasulyesi (20dk)",
+        u8"Soja (20m)",
+        u8"Soja (20m)",
+        u8"Соя (20m)",
+        u8"Sojabohne (20m)",
+        u8"Soja (20m)",
+        u8"Soia (20m)",
+        u8"Soja (20m)",
+        u8"Sojabonen (20m)",
+    } },
+    { u8"Sugarcane (30m)", {
+        u8"Şeker Kamışı (30dk)",
+        u8"Caña de Azúcar (30m)",
+        u8"Cana de Açúcar (30m)",
+        u8"Сахарный тростник (30m)",
+        u8"Zuckerrohr (30m)",
+        u8"Canne à sucre (30m)",
+        u8"Canna da zucchero (30m)",
+        u8"Trzcina cukrowa (30m)",
+        u8"Suikerriet (30m)",
+    } },
+    { u8"Enable Random Salecycle", {
+        u8"Rastgele Satış Döngüsü",
+        u8"Habilitar ciclo de venta aleatorio",
+        u8"Habilitar ciclo de venda aleatório",
+        u8"Включить случайный цикл продаж",
+        u8"Zufälligen Verkaufszyklus aktivieren",
+        u8"Activer le cycle de vente aléatoire",
+        u8"Abilita il ciclo di vendita casuale",
+        u8"Włącz losowy cykl sprzedaży",
+        u8"Willekeurige verkoopcyclus inschakelen",
+    } },
+    { u8"TEST SEED", {
+        u8"TOHUM TESTİ",
+        u8"PROBAR SEMILLA",
+        u8"TESTAR SEMENTE",
+        u8"ТЕСТ СЕМЯН",
+        u8"SAATGUT TESTEN",
+        u8"TEST DE GRAINE",
+        u8"SEME DI PROVA",
+        u8"NASIONA TESTOWE",
+        u8"TESTZAAD",
+    } },
+    { u8"TEST SICKLE", {
+        u8"TIRPAN TESTİ",
+        u8"PROBAR HOZ",
+        u8"TESTAR FOICE",
+        u8"ТЕСТ СЕРПА",
+        u8"SICHEL TESTEN",
+        u8"FAUCILLE D'ESSAI",
+        u8"PROVA FALCE",
+        u8"SIERP TESTOWY",
+        u8"TESTSIKKEL",
+    } },
+    { u8"INJECT IMPORTANT FILES", {
+        u8"ÖNEMLİ DOSYALARI YÜKLE",
+        u8"INYECTAR ARCHIVOS IMPORTANTES",
+        u8"INJETAR ARQUIVOS IMPORTANTES",
+        u8"ВНЕСЕНИЕ ВАЖНЫХ ФАЙЛОВ",
+        u8"WICHTIGE DATEIEN EINFÜGEN",
+        u8"INJECTER DES FICHIERS IMPORTANTS",
+        u8"INIEZIONE FILE IMPORTANTI",
+        u8"WSTRZYKNIJ WAŻNE PLIKI",
+        u8"INJECTEER BELANGRIJKE BESTANDEN",
+    } },
+    { u8"MAIN ACTIONS", {
+        u8"ANA EYLEMLER",
+        u8"PRINCIPALES ACCIONES",
+        u8"PRINCIPAIS AÇÕES",
+        u8"ОСНОВНЫЕ ДЕЙСТВИЯ",
+        u8"MAIN ACTIONS",
+        u8"ACTIONS PRINCIPALES",
+        u8"AZIONI PRINCIPALI",
+        u8"GŁÓWNE DZIAŁANIA",
+        u8"BELANGRIJKSTE ACTIES",
+    } },
+    { u8"LAUNCH EMULATOR + HAY DAY", {
+        u8"Emülatörü Başlat + HAY DAY",
+        u8"LANZAR EMULADOR + HAY DAY",
+        u8"LANÇAMENTO DO EMULADOR + HAY DAY",
+        u8"ЗАПУСК ЭМУЛЯТОРА + HAY DAY",
+        u8"EMULATOR STARTEN + HAY DAY",
+        u8"LANCEMENT DE L'ÉMULATEUR + HAY DAY",
+        u8"AVVIA EMULATORE + HAY DAY",
+        u8"URUCHOM EMULATOR + HAY DAY",
+        u8"LANCERINGEMULATOR + HAY DAY",
+    } },
+    { u8"STOP BOT", {
+        u8"BOTU DURDUR",
+        u8"DETENER BOT",
+        u8"PARAR BOT",
+        u8"ОСТАНОВИТЬ БОТА",
+        u8"BOT STOPPEN",
+        u8"ARRÊTER BOT",
+        u8"ARRESTO BOT",
+        u8"ZATRZYMAJ BOT",
+        u8"STOP BOT",
+    } },
+    { u8"START BOT", {
+        u8"BOTU BAŞLAT",
+        u8"INICIAR BOT",
+        u8"INICIAR BOT",
+        u8"ЗАПУСТИТЬ БОТА",
+        u8"BOT STARTEN",
+        u8"DÉMARRER BOT",
+        u8"INIZIO BOT",
+        u8"START BOT",
+        u8"BEGIN BOT",
+    } },
+    { u8"ACCOUNT MANAGER & INSPECTOR", {
+        u8"HESAP YÖNETİCİSİ VE İNCELEME",
+        u8"GERENTE DE CUENTA E INSPECTOR",
+        u8"GERENTE DE CONTA E INSPETOR",
+        u8"МЕНЕДЖЕР АККАУНТА И ИНСПЕКТОР",
+        u8"KONTOVERWALTER & INSPEKTOR",
+        u8"RESPONSABLE DE COMPTE ET INSPECTEUR",
+        u8"GESTORE ACCOUNT E ISPETTORE",
+        u8"MENEDŻER KONTA I INSPEKTOR",
+        u8"ACCOUNTMANAGER & INSPECTOR",
+    } },
+    { u8"Click on a slot to expand details, edit names, and manage saves.", {
+        u8"Ayrıntıları genişletmek, adları düzenlemek ve kayıtları yönetmek için bir yuvaya tıklayın.",
+        u8"Haga clic en una ranura para expandir detalles, editar nombres y administrar guardados.",
+        u8"Clique em um slot para expandir detalhes, editar nomes e gerenciar salvamentos.",
+        u8"Нажмите на слот, чтобы раскрыть подробную информацию, изменить имена и управлять сохранениями.",
+        u8"Klicken Sie auf einen Slot, um Details zu erweitern, Namen zu bearbeiten und Speicherungen zu verwalten.",
+        u8"Cliquez sur un emplacement pour développer les détails, modifier les noms et gérer les sauvegardes.",
+        u8"Fai clic su uno slot per espandere i dettagli, modificare i nomi e gestire i salvataggi.",
+        u8"Kliknij miejsce, aby rozwinąć szczegóły, edytować nazwy i zarządzać zapisami.",
+        u8"Klik op een slot om details uit te vouwen, namen te bewerken en opgeslagen bestanden te beheren.",
+    } },
+    { u8"Custom Name:", {
+        u8"Özel Ad:",
+        u8"Nombre personalizado:",
+        u8"Nome personalizado:",
+        u8"Пользовательское имя:",
+        u8"Benutzerdefinierter Name:",
+        u8"Nom personnalisé :",
+        u8"Nome personalizzato:",
+        u8"Nazwa niestandardowa:",
+        u8"Aangepaste naam:",
+    } },
+    { u8"SET AS ACTIVE SLOT", {
+        u8"AKTİF YUVA OLARAK AYARLA",
+        u8"ESTABLECER COMO RANURA ACTIVA",
+        u8"DEFINIR COMO SLOT ATIVO",
+        u8"УСТАНОВЛЕНО АКТИВНЫМ СЛОТОМ",
+        u8"ALS AKTIVER SLOT EINGESTELLT",
+        u8"DÉFINI COMME EMPLACEMENT ACTIF",
+        u8"IMPOSTA COME SLOT ATTIVO",
+        u8"USTAW JAKO AKTYWNE SLOT",
+        u8"INSTELLEN ALS ACTIEF SLOT",
+    } },
+    { u8"[ CURRENTLY ACTIVE ]", {
+        u8"[ ŞU ANDA AKTİF ]",
+        u8"[ ACTUALMENTE ACTIVO ]",
+        u8"[ ATUALMENTE ATIVO ]",
+        u8"[ В НАСТОЯЩЕЕ ВРЕМЯ АКТИВНО ]",
+        u8"[DERZEIT AKTIV]",
+        u8"[ ACTUELLEMENT ACTIF ]",
+        u8"[ ATTUALMENTE ATTIVO ]",
+        u8"[AKTUALNIE AKTYWNE]",
+        u8"[ MOMENTEEL ACTIEF ]",
+    } },
+    { u8"PROFILE", {
+        u8"PROFİL",
+        u8"PERFIL",
+        u8"PERFIL",
+        u8"ПРОФИЛЬ",
+        u8"PROFIL",
+        u8"PROFIL",
+        u8"PROFILO",
+        u8"PROFIL",
+        u8"PROFIEL",
+    } },
+    { u8"BARN", {
+        u8"AMBAR",
+        u8"GRANERO",
+        u8"CELEIRO",
+        u8"САРАЬ",
+        u8"SCHEUNE",
+        u8"GRANGE",
+        u8"FIENILE",
+        u8"STODOŁA",
+        u8"SCHUUR",
+    } },
+    { u8"Bolt: %d", {
+        u8"Cıvata: %d",
+        u8"Perno: %d",
+        u8"Parafuso: %d",
+        u8"Болт: %d",
+        u8"Bolzen: %d",
+        u8"Boulon : %d",
+        u8"Bullone: %d",
+        u8"Śruba: %d",
+        u8"Bout: %d",
+    } },
+    { u8"Plank: %d", {
+        u8"Kalas: %d",
+        u8"Tablón: %d",
+        u8"Prancha: %d",
+        u8"Планка: %d",
+        u8"Planke: %d",
+        u8"Planche : %d",
+        u8"Plank: %d",
+        u8"Deska: %d",
+        u8"Plank: %d",
+    } },
+    { u8"Tape: %d", {
+        u8"Bant: %d",
+        u8"Cinta: %d",
+        u8"Fita: %d",
+        u8"Лента: %d",
+        u8"Band: %d",
+        u8"Bande : %d",
+        u8"Nastro: %d",
+        u8"Taśma: %d",
+        u8"Band: %d",
+    } },
+    { u8"SILO", {
+        u8"SILO",
+        u8"SILO",
+        u8"SILO",
+        u8"БАНК",
+        u8"SILO",
+        u8"SILO",
+        u8"SILO",
+        u8"SILO",
+        u8"SILO",
+    } },
+    { u8"Nail: %d", {
+        u8"Çivi: %d",
+        u8"Clavo: %d",
+        u8"Prego: %d",
+        u8"Гвоздь: %d",
+        u8"Nagel: %d",
+        u8"Clou : %d",
+        u8"Chiodo: %d",
+        u8"Gwóźdź: %d",
+        u8"Nagel: %d",
+    } },
+    { u8"Screw: %d", {
+        u8"Vida: %d",
+        u8"Tornillo: %d",
+        u8"Parafuso: %d",
+        u8"Винт: %d",
+        u8"Schraube: %d",
+        u8"Vis : %d",
+        u8"Vite: %d",
+        u8"Śruba: %d",
+        u8"Schroef: %d",
+    } },
+    { u8"Panel: %d", {
+        u8"Panel: %d",
+        u8"Panel: %d",
+        u8"Painel: %d",
+        u8"Панель: %d",
+        u8"Panel: %d",
+        u8"Panneau : %d",
+        u8"Pannello: %d",
+        u8"Panel: %d",
+        u8"Paneel: %d",
+    } },
+    { u8"EMPTY SLOT - NO DATA SAVED YET.", {
+        u8"BOŞ YUVA - HENÜZ KAYITLI VERİ YOK.",
+        u8"RANURA VACÍA - AÚN NO HAY DATOS GUARDADOS.",
+        u8"SLOT VAZIO - NENHUM DADO SALVADO AINDA.",
+        u8"ПУСТОЙ СЛОТ – ДАННЫЕ ПОКА НЕ СОХРАНЕНЫ.",
+        u8"LEERER STECKPLATZ – NOCH KEINE DATEN GESPEICHERT.",
+        u8"EMPLACEMENT VIDE - AUCUNE DONNÉE ENCORE ENREGISTRÉE.",
+        u8"SLOT VUOTO - NESSUN DATO ANCORA SALVATO.",
+        u8"PUSTE SLOT - ŻADNE DANYCH NIE ZAPISANO JESZCZE.",
+        u8"LEGE SLOT - NOG GEEN GEGEVENS OPGESLAGEN.",
+    } },
+    { u8"Enter game, skip tutorial, reach level 7 and click 'SAVE GAME' below.", {
+        u8"Oyuna girin, eğitimi atlayın, 7. seviyeye ulaşın ve aşağıdaki 'OYUNU KAYDET'e tıklayın.",
+        u8"Ingresa al juego, salta el tutorial, alcanza el nivel 7 y haz clic en 'GUARDAR JUEGO' a continuación.",
+        u8"Entre no jogo, pule o tutorial, alcance o nível 7 e clique em 'SALVAR JOGO' abaixo.",
+        u8"Войдите в игру, пропустите обучение, достигните 7-го уровня и нажмите «СОХРАНИТЬ ИГРУ» ниже.",
+        u8"Betreten Sie das Spiel, überspringen Sie das Tutorial, erreichen Sie Level 7 und klicken Sie unten auf „SPIEL SPEICHERN“.",
+        u8"Entrez dans le jeu, ignorez le didacticiel, atteignez le niveau 7 et cliquez sur « ENREGISTRER LE JEU » ci-dessous.",
+        u8"Accedi al gioco, salta il tutorial, raggiungi il livello 7 e fai clic su \"SALVA GIOCO\" di seguito.",
+        u8"Wejdź do gry, pomiń samouczek, osiągnij poziom 7 i kliknij „ZAPISZ GRĘ” poniżej.",
+        u8"Ga naar het spel, sla de tutorial over, bereik niveau 7 en klik hieronder op 'SPEL OPSLAAN'.",
+    } },
+    { u8"SAVE GAME TO THIS SLOT", {
+        u8"OYUNU BU YUVAYA KAYDET",
+        u8"GUARDAR JUEGO EN ESTA RANURA",
+        u8"SALVE O JOGO NESTE SLOT",
+        u8"СОХРАНИТЕ ИГРУ В ЭТОТ СЛОТ",
+        u8"SPIEL AUF DIESEM SLOT SPEICHERN",
+        u8"SAUVEGARDER LE JEU SUR CET EMPLACEMENT",
+        u8"SALVA LA PARTITA IN QUESTO SLOT",
+        u8"ZAPISZ GRĘ W TYM Slocie",
+        u8"SPEL OP DIT SLOT OPSLAAN",
+    } },
+    { u8"LOAD SLOT TO EMULATOR", {
+        u8"HESABI EMÜLATÖRE YÜKLE",
+        u8"CARGAR RANURA AL EMULADOR",
+        u8"CARREGAR SLOT NO EMULADOR",
+        u8"ЗАГРУЗКА СЛОТА В ЭМУЛЯТОР",
+        u8"SLOT IN EMULATOR LADEN",
+        u8"CHARGEMENT DE L'EMPLACEMENT SUR L'ÉMULATEUR",
+        u8"CARICA LO SLOT NELL'EMULATORE",
+        u8"Wczytaj gniazdo do emulatora",
+        u8"LAAD SLOT NAAR EMULATOR",
+    } },
+    { u8"Instance is disabled.", {
+        u8"Örnek devre dışı bırakıldı.",
+        u8"La instancia está deshabilitada.",
+        u8"A instância está desativada.",
+        u8"Экземпляр отключен.",
+        u8"Instanz ist deaktiviert.",
+        u8"L'instance est désactivée.",
+        u8"L'istanza è disabilitata.",
+        u8"Instancja jest wyłączona.",
+        u8"Instantie is uitgeschakeld.",
+    } },
+    { u8"Account Management", {
+        u8"Hesap Yönetimi",
+        u8"Gestión de Cuentas",
+        u8"Gerenciamento de Contas",
+        u8"Управление аккаунтами",
+        u8"Kontoverwaltung",
+        u8"Gestion de compte",
+        u8"Gestione dell'account",
+        u8"Zarządzanie kontem",
+        u8"Accountbeheer",
+    } },
+    { u8"TRANSFER ACCOUNTS BETWEEN INSTANCES", {
+        u8"BOTLAR ARASI HESAP AKTARIMI",
+        u8"TRANSFERIR CUENTAS ENTRE INSTANCIAS",
+        u8"TRANSFERIR CONTAS ENTRE INSTÂNCIAS",
+        u8"ПЕРЕНОС АККАУНТОВ МЕЖДУ ЭКЗЕМПЛЯРАМИ",
+        u8"KONTEN ZWISCHEN INSTANZEN ÜBERTRAGEN",
+        u8"TRANSFERT DE COMPTES ENTRE INSTANCES",
+        u8"TRASFERIMENTO ACCOUNT TRA ISTANZE",
+        u8"PRZENIESIENIE KONT MIĘDZY INSTANCJAMI",
+        u8"REKENINGEN OVERDRAGEN TUSSEN INSTANTIES",
+    } },
+    { u8"Move an account data file from one slot to another.", {
+        u8"Bir hesabı, farklı bir emülatördeki bota aktarmanızı sağlar.",
+        u8"Mover un archivo de datos de cuenta de una ranura a otra.",
+        u8"Mover um arquivo de dados de conta de um slot para outro.",
+        u8"Переместите файл данных учетной записи из одного слота в другой.",
+        u8"Verschieben Sie eine Kontodatendatei von einem Slot in einen anderen.",
+        u8"Déplacer un fichier de données de compte d'un emplacement à un autre.",
+        u8"Sposta un file di dati dell'account da uno slot a un altro.",
+        u8"Przenieś plik danych konta z jednego slotu do drugiego.",
+        u8"Verplaats een accountgegevensbestand van het ene slot naar het andere.",
+    } },
+    { u8"Slot 1", {
+        u8"Hesap 1",
+        u8"Ranura 1",
+        u8"Slot 1",
+        u8"Слот 1",
+        u8"Steckplatz 1",
+        u8"Emplacement 1",
+        u8"Slot 1",
+        u8"Gniazdo 1",
+        u8"Sleuf 1",
+    } },
+    { u8"Slot 2", {
+        u8"Hesap 2",
+        u8"Ranura 2",
+        u8"Slot 2",
+        u8"Слот 2",
+        u8"Steckplatz 2",
+        u8"Emplacement 2",
+        u8"Slot 2",
+        u8"Gniazdo 2",
+        u8"Sleuf 2",
+    } },
+    { u8"Slot 3", {
+        u8"Hesap 3",
+        u8"Ranura 3",
+        u8"Slot 3",
+        u8"Слот 3",
+        u8"Steckplatz 3",
+        u8"Emplacement 3",
+        u8"Slot 3",
+        u8"Gniazdo 3",
+        u8"Sleuf 3",
+    } },
+    { u8"Slot 4", {
+        u8"Hesap 4",
+        u8"Ranura 4",
+        u8"Slot 4",
+        u8"Слот 4",
+        u8"Steckplatz 4",
+        u8"Emplacement 4",
+        u8"Slot 4",
+        u8"Gniazdo 4",
+        u8"Sleuf 4",
+    } },
+    { u8"Slot 5", {
+        u8"Hesap 5",
+        u8"Ranura 5",
+        u8"Slot 5",
+        u8"Слот 5",
+        u8"Steckplatz 5",
+        u8"Emplacement 5",
+        u8"Slot 5",
+        u8"Gniazdo 5",
+        u8"Sleuf 5",
+    } },
+    { u8"Slot 6", {
+        u8"Yuva 6",
+        u8"Ranura 6",
+        u8"Slot 6",
+        u8"Слот 6",
+        u8"Steckplatz 6",
+        u8"Emplacement 6",
+        u8"Slot 6",
+        u8"Gniazdo 6",
+        u8"Sleuf 6",
+    } },
+    { u8"Slot 7", {
+        u8"Yuva 7",
+        u8"Ranura 7",
+        u8"Slot 7",
+        u8"Слот 7",
+        u8"Steckplatz 7",
+        u8"Emplacement 7",
+        u8"Slot 7",
+        u8"Gniazdo 7",
+        u8"Sleuf 7",
+    } },
+    { u8"Slot 8", {
+        u8"Yuva 8",
+        u8"Ranura 8",
+        u8"Slot 8",
+        u8"Слот 8",
+        u8"Steckplatz 8",
+        u8"Emplacement 8",
+        u8"Slot 8",
+        u8"Gniazdo 8",
+        u8"Sleuf 8",
+    } },
+    { u8"Slot 9", {
+        u8"Yuva 9",
+        u8"Ranura 9",
+        u8"Slot 9",
+        u8"Слот 9",
+        u8"Steckplatz 9",
+        u8"Emplacement 9",
+        u8"Slot 9",
+        u8"Gniazdo 9",
+        u8"Sleuf 9",
+    } },
+    { u8"Slot 10", {
+        u8"Yuva 10",
+        u8"Ranura 10",
+        u8"Slot 10",
+        u8"Слот 10",
+        u8"Steckplatz 10",
+        u8"Emplacement 10",
+        u8"Slot 10",
+        u8"Miejsce 10",
+        u8"Sleuf 10",
+    } },
+    { u8"Slot 11", {
+        u8"Yuva 11",
+        u8"Ranura 11",
+        u8"Slot 11",
+        u8"Слот 11",
+        u8"Steckplatz 11",
+        u8"Emplacement 11",
+        u8"Slot 11",
+        u8"Gniazdo 11",
+        u8"Sleuf 11",
+    } },
+    { u8"Slot 12", {
+        u8"Yuva 12",
+        u8"Ranura 12",
+        u8"Slot 12",
+        u8"Слот 12",
+        u8"Steckplatz 12",
+        u8"Emplacement 12",
+        u8"Slot 12",
+        u8"Miejsce 12",
+        u8"Sleuf 12",
+    } },
+    { u8"Slot 13", {
+        u8"Yuva 13",
+        u8"Ranura 13",
+        u8"Slot 13",
+        u8"Слот 13",
+        u8"Steckplatz 13",
+        u8"Emplacement 13",
+        u8"Slot 13",
+        u8"Miejsce 13",
+        u8"Sleuf 13",
+    } },
+    { u8"Slot 14", {
+        u8"Yuva 14",
+        u8"Ranura 14",
+        u8"Slot 14",
+        u8"Слот 14",
+        u8"Steckplatz 14",
+        u8"Emplacement 14",
+        u8"Slot 14",
+        u8"Miejsce 14",
+        u8"Sleuf 14",
+    } },
+    { u8"Slot 15", {
+        u8"Yuva 15",
+        u8"Ranura 15",
+        u8"Slot 15",
+        u8"Слот 15",
+        u8"Steckplatz 15",
+        u8"Emplacement 15",
+        u8"Slot 15",
+        u8"Miejsce 15",
+        u8"Sleuf 15",
+    } },
+    { u8"SOURCE (From)", {
+        u8"KAYNAK (Nereden)",
+        u8"FUENTE (De)",
+        u8"FONTE (De)",
+        u8"ИСТОЧНИК (От)",
+        u8"QUELLE (Von)",
+        u8"SOURCE (De)",
+        u8"FONTE (Da)",
+        u8"ŹRÓDŁO (od)",
+        u8"BRON (van)",
+    } },
+    { u8"Instance##src", {
+        u8"Bot##src",
+        u8"Instancia##src",
+        u8"Instance##src",
+        u8"Экземпляр##src",
+        u8"Instanz##src",
+        u8"Instance##src",
+        u8"Istanza##src",
+        u8"Instancja##src",
+        u8"Instantie##src",
+    } },
+    { u8"Slot##src", {
+        u8"Hesap##src",
+        u8"Ranura##src",
+        u8"Slot##src",
+        u8"Слот##src",
+        u8"Steckplatz##src",
+        u8"Emplacement##src",
+        u8"Slot##src",
+        u8"Gniazdo##src",
+        u8"Sleuf##src",
+    } },
+    { u8"DESTINATION (To)", {
+        u8"HEDEF (Nereye)",
+        u8"DESTINO (A)",
+        u8"DESTINO (Para)",
+        u8"НАЗНАЧЕНИЕ (Куда)",
+        u8"ZIEL (An)",
+        u8"DESTINATION (Vers)",
+        u8"DESTINAZIONE (A)",
+        u8"MIEJSCE DOCELOWE (Do)",
+        u8"BESTEMMING (naar)",
+    } },
+    { u8"Instance##dst", {
+        u8"Bot##dst",
+        u8"Instancia##dst",
+        u8"Instance##dst",
+        u8"Экземпляр##dst",
+        u8"Instanz##dst",
+        u8"Instance##dst",
+        u8"Istanza##dst",
+        u8"Instancja##dst",
+        u8"Instantie##dst",
+    } },
+    { u8"Slot##dst", {
+        u8"Hesap##dst",
+        u8"Ranura##dst",
+        u8"Slot##dst",
+        u8"Слот##dst",
+        u8"Steckplatz##dst",
+        u8"Emplacement##dst",
+        u8"Slot##dst",
+        u8"Gniazdo##dst",
+        u8"Sleuf##dst",
+    } },
+    { u8"MOVE ACCOUNT", {
+        u8"HESABI TAŞI",
+        u8"MOVER CUENTA",
+        u8"MOVER CONTA",
+        u8"ПЕРЕМЕСТИТЬ АККАУНТ",
+        u8"KONTO VERSCHIEBEN",
+        u8"DÉPLACER UN COMPTE",
+        u8"SPOSTA ACCOUNT",
+        u8"PRZENIEŚ KONTO",
+        u8"ACCOUNT VERPLAATSEN",
+    } },
+    { u8"Swapper Error: Source and Destination cannot be the same!", {
+        u8"Değiştirici Hatası: Kaynak ve Hedef aynı olamaz!",
+        u8"Error del Intercambiador: ¡Origen y Destino no pueden ser el mismo!",
+        u8"Erro do Trocador: Origem e Destino não podem ser os mesmos!",
+        u8"Ошибка переключателя: Источник и назначение не могут совпадать!",
+        u8"Wechsler-Fehler: Quelle und Ziel dürfen nicht gleich sein!",
+        u8"Erreur Swapper : la source et la destination ne peuvent pas être identiques !",
+        u8"Errore swapper: Origine e destinazione non possono essere le stesse!",
+        u8"Błąd swapera: Źródło i miejsce docelowe nie mogą być takie same!",
+        u8"Swapperfout: bron en bestemming kunnen niet hetzelfde zijn!",
+    } },
+    { u8"Swapper Error: Source slot is empty!", {
+        u8"Değiştirici Hatası: Kaynak slotu boş!",
+        u8"Error del Intercambiador: ¡La ranura de origen está vacía!",
+        u8"Erro do Trocador: Slot de origem está vazio!",
+        u8"Ошибка переключателя: Исходный слот пуст!",
+        u8"Wechsler-Fehler: Quell-Slot ist leer!",
+        u8"Erreur Swapper : l'emplacement source est vide !",
+        u8"Errore swapper: lo slot di origine è vuoto!",
+        u8"Błąd swapera: Gniazdo źródłowe jest puste!",
+        u8"Swapperfout: bronslot is leeg!",
+    } },
+    { u8"Account successfully moved!", {
+        u8"Hesap başarıyla taşındı!",
+        u8"¡Cuenta movida con éxito!",
+        u8"Conta movida com sucesso!",
+        u8"Аккаунт успешно перемещен!",
+        u8"Konto erfolgreich verschoben!",
+        u8"Compte déplacé avec succès !",
+        u8"Account spostato con successo!",
+        u8"Konto zostało pomyślnie przeniesione!",
+        u8"Account succesvol verplaatst!",
+    } },
+    { u8"CREATE NEW ACCOUNT (WIPE GAME DATA)", {
+        u8"YENİ HESAP OLUŞTUR (OYUN VERİSİNİ SİL)",
+        u8"CREAR NUEVA CUENTA (BORRAR DATOS)",
+        u8"CRIAR NOVA CONTA (APAGAR DADOS)",
+        u8"СОЗДАТЬ НОВЫЙ АККАУНТ (УДАЛИТЬ ДАННЫЕ)",
+        u8"NEUES KONTO ERSTELLEN (DATEN LÖSCHEN)",
+        u8"CRÉER UN NOUVEAU COMPTE (EFFACER LES DONNÉES DU JEU)",
+        u8"CREA NUOVO ACCOUNT (CANCELLAZIONE DEI DATI DI GIOCO)",
+        u8"UTWÓRZ NOWE KONTO (USUŃ DANE GRY)",
+        u8"NIEUW ACCOUNT MAKEN (SPELGEGEVENS WISSEN)",
+    } },
+    { u8"BEWARE! This will delete current game data. Make sure you saved the account!", {
+        u8"DİKKAT! Bu işlem emülatördeki oyun verisini sıfırlar. Hesabı kaydettiğinizden emin olun!",
+        u8"¡CUIDADO! Esto eliminará los datos actuales del juego. ¡Asegúrate de haber guardado la cuenta!",
+        u8"BEWARE! This will delete current game data. Certifique-se de salvar a conta!",
+        u8"ОСТОРОЖНО! Это приведет к удалению текущих игровых данных. Убедитесь, что вы сохранили аккаунт!",
+        u8"ACHTUNG! Dadurch werden die aktuellen Spieldaten gelöscht. Stellen Sie sicher, dass Sie das Konto gespeichert haben!",
+        u8"ATTENTION ! Cela supprimera les données de jeu actuelles. Assurez-vous d'avoir enregistré le compte !",
+        u8"ATTENZIONE! Ciò eliminerà i dati di gioco correnti. Assicurati di aver salvato l'account!",
+        u8"UWAGA! Spowoduje to usunięcie bieżących danych gry. Upewnij się, że zapisałeś konto!",
+        u8"LET OP! Hierdoor worden de huidige spelgegevens verwijderd. Zorg ervoor dat je het account hebt opgeslagen!",
+    } },
+    { u8"WIPE DATA & CREATE NEW", {
+        u8"VERİYİ SİL & YENİ HESAP AÇ",
+        u8"BORRAR DATOS Y CREAR NUEVA",
+        u8"APAGAR DADOS E CRIAR NOVA",
+        u8"ОЧИСТИТЬ ДАННЫЕ И СОЗДАТЬ",
+        u8"DATEN LÖSCHEN & NEU ERSTELLEN",
+        u8"WIPE DATA & CREATE NEW",
+        u8"CANCELLARE I DATI E CREA NUOVO",
+        u8"WYCZYŚĆ DANE I UTWÓRZ NOWE",
+        u8"GEGEVENS WISSEN EN NIEUW MAKEN",
+    } },
+    { u8"Wiping game data to create new account...", {
+        u8"Yeni hesap oluşturmak için oyun verileri siliniyor...",
+        u8"Borrando datos del juego para crear una nueva cuenta...",
+        u8"Apagando dados do jogo para criar nova conta...",
+        u8"Удаление данных игры для создания нового аккаунта...",
+        u8"Lösche Spieldaten, um neues Konto zu erstellen...",
+        u8"Effacement des données de jeu pour créer un nouveau compte...",
+        u8"Cancellazione dei dati di gioco per creare un nuovo account...",
+        u8"Czyszczenie danych gry w celu utworzenia nowego konta...",
+        u8"Spelgegevens wissen om een nieuw account aan te maken...",
+    } },
+    { u8"Data wiped successfully! Launch game to start fresh.", {
+        u8"Veriler başarıyla silindi! Sıfırdan başlamak için oyunu başlatın.",
+        u8"¡Datos borrados con éxito! Inicia el juego para empezar de cero.",
+        u8"Dados apagados com sucesso! Inicie o jogo para começar do zero.",
+        u8"Данные успешно стерты! Запустите игру, чтобы начать заново.",
+        u8"Daten erfolgreich gelöscht! Spiel starten, um neu zu beginnen.",
+        u8"Données effacées avec succès ! Lancez le jeu pour repartir à zéro.",
+        u8"Dati cancellati con successo! Avvia il gioco per ricominciare da capo.",
+        u8"Dane zostały usunięte pomyślnie! Uruchom grę, aby zacząć od nowa.",
+        u8"Gegevens succesvol gewist! Start het spel om opnieuw te beginnen.",
+    } },
+    { u8"Auto Tom Config", {
+        u8"Otomatik Tom Ayarı",
+        u8"Configuración Tom",
+        u8"Configuração do Tom",
+        u8"Настройка Авто-Тома",
+        u8"Auto-Tom-Konfiguration",
+        u8"Configuration automatique du tom",
+        u8"Configurazione Tom automatica",
+        u8"Automatyczna konfiguracja Toma",
+        u8"Auto Tom-configuratie",
+    } },
+    { u8"AUTOMATED TOM MANAGER", {
+        u8"OTOMATİK TOM YÖNETİCİSİ",
+        u8"GESTOR AUTOMÁTICO DE TOM",
+        u8"GERENCIADOR AUTOMÁTICO DO TOM",
+        u8"МЕНЕДЖЕР АВТО-ТОМА",
+        u8"AUTOMATISCHER TOM-MANAGER",
+        u8"AUTOMATED TOM MANAGER",
+        u8"GESTIONE TOM AUTOMATIZZATA",
+        u8"AUTOMATYCZNY MENEDŻER TOMA",
+        u8"GEAUTOMATISEERDE TOM-MANAGER",
+    } },
+    { u8"Tom will be triggered every 2 hours if contract is active.", {
+        u8"Eğer anlaşma aktifse, Tom her 2 saatte bir otomatik gönderilir.",
+        u8"Tom se activará cada 2 horas si el contrato está activo.",
+        u8"Tom será acionado a cada 2 horas se o contrato estiver ativo.",
+        u8"Том будет активироваться каждые 2 часа, если контракт активен.",
+        u8"Tom wird alle 2 Stunden ausgelöst, wenn der Vertrag aktiv ist.",
+        u8"Tom sera déclenché toutes les 2 heures si le contrat est actif.",
+        u8"Tom verrà attivato ogni 2 ore se il contratto è attivo.",
+        u8"Tom będzie uruchamiany co 2 godziny, jeśli kontrakt jest aktywny.",
+        u8"Tom wordt elke 2 uur getriggerd als het contract actief is.",
+    } },
+    { u8"Instance##tom", {
+        u8"Bot##tom",
+        u8"Instancia##tom",
+        u8"Instance##tom",
+        u8"Экземпляр##tom",
+        u8"Instanz##tom",
+        u8"Instance##tom",
+        u8"Istanza##tom",
+        u8"Instancja##tom",
+        u8"Instantie##tom",
+    } },
+    { u8"Slot##tom", {
+        u8"Hesap##tom",
+        u8"Ranura##tom",
+        u8"Slot##tom",
+        u8"Слот##tom",
+        u8"Steckplatz##tom",
+        u8"Emplacement##tom",
+        u8"Slot##tom",
+        u8"Gniazdo##tom",
+        u8"Sleuf##tom",
+    } },
+    { u8"Enable Auto Tom For This Slot", {
+        u8"Bu Hesap İçin Otomatik Tom'u Aç",
+        u8"Habilitar Tom para esta ranura",
+        u8"Ativar Tom Automático para este Slot",
+        u8"Включить Авто-Том для этого слота",
+        u8"Auto-Tom für diesen Slot aktivieren",
+        u8"Activer Auto Tom pour cet emplacement",
+        u8"Abilita Auto Tom per questo slot",
+        u8"Włącz funkcję Auto Tom dla tego gniazda",
+        u8"Schakel Auto Tom in voor dit slot",
+    } },
+    { u8"Remaining Hours", {
+        u8"Kalan Saat",
+        u8"Horas restantes",
+        u8"Horas Restantes",
+        u8"Осталось часов",
+        u8"Verbleibende Stunden",
+        u8"Heures restantes",
+        u8"Ore rimanenti",
+        u8"Pozostałe godziny",
+        u8"Resterende uren",
+    } },
+    { u8"Enter how many hours left on Tom's contract.", {
+        u8"Tom'un sözleşmesinin bitmesine kaç saat kaldığını yazın.",
+        u8"Ingrese cuántas horas quedan en el contrato de Tom.",
+        u8"Insira quantas horas restantes do contrato de Tom.",
+        u8"Введите количество часов, оставшихся до окончания контракта Тома.",
+        u8"Geben Sie ein, wie viele Stunden Toms Vertrag noch hat.",
+        u8"Saisissez le nombre d'heures restantes sur le contrat de Tom.",
+        u8"Inserisci quante ore restano nel contratto di Tom.",
+        u8"Podaj ile godzin pozostało do końca kontraktu Tomka.",
+        u8"Voer in hoeveel uren er nog over zijn van Toms contract.",
+    } },
+    { u8"Barn", {
+        u8"Ambar",
+        u8"Granero",
+        u8"Celeiro",
+        u8"Амбар",
+        u8"Scheune",
+        u8"Grange",
+        u8"Fienile",
+        u8"Stodoła",
+        u8"Schuur",
+    } },
+    { u8"Silo", {
+        u8"Silo",
+        u8"Silo",
+        u8"Silo",
+        u8"Силос",
+        u8"Silo",
+        u8"Silos",
+        u8"Silo",
+        u8"Silos",
+        u8"Silo",
+    } },
+    { u8"Search Category", {
+        u8"Arama Kategorisi",
+        u8"Categoría de Búsqueda",
+        u8"Categoria de Busca",
+        u8"Категория поиска",
+        u8"Suchkategorie",
+        u8"Catégorie de recherche",
+        u8"Categoria di ricerca",
+        u8"Kategoria wyszukiwania",
+        u8"Categorie zoeken",
+    } },
+    { u8"ACCEPT ITEM NAME", {
+        u8"EŞYA ADINI ONAYLA",
+        u8"ACEPTAR NOMBRE",
+        u8"ACEITAR NOME DO ITEM",
+        u8"ПРИНЯТЬ ИМЯ ПРЕДМЕТА",
+        u8"NAME AKZEPTIEREN",
+        u8"ACCEPTER LE NOM DE L'ÉLÉMENT",
+        u8"ACCETTA NOME ARTICOLO",
+        u8"ZAAKCEPTUJ NAZWĘ ELEMENTU",
+        u8"ACCEPTEER ITEMNAAM",
+    } },
+    { u8"Current Target Item: [%s]", {
+        u8"Mevcut Hedef Eşya: [%s]",
+        u8"Elemento de destino actual: [%s]",
+        u8"Item de destino atual: [%s]",
+        u8"Текущий целевой элемент: [%s]",
+        u8"Aktuelles Zielelement: [%s]",
+        u8"Élément cible actuel : [%s]",
+        u8"Elemento di destinazione corrente: [%s]",
+        u8"Bieżący przedmiot docelowy: [%s]",
+        u8"Huidig doelitem: [%s]",
+    } },
+    { u8"Farm Inspector", {
+        u8"Çiftlik Durumu",
+        u8"Inspector de Granja",
+        u8"Inspetor da Fazenda",
+        u8"Инспектор фермы",
+        u8"Farm-Inspektor",
+        u8"Inspecteur agricole",
+        u8"Ispettore dell'azienda agricola",
+        u8"Inspektor farmy",
+        u8"Boerderijinspecteur",
+    } },
+    { u8"LIVE FARM OVERVIEW & INVENTORY", {
+        u8"CANLI ÇİFTLİK VE ENVANTER DURUMU",
+        u8"VISTA GENERAL EN VIVO E INVENTARIO",
+        u8"VISÃO GERAL AO VIVO E INVENTÁRIO",
+        u8"ОБЗОР ФЕРМЫ И ИНВЕНТАРЯ",
+        u8"LIVE-FARM-ÜBERSICHT & INVENTAR",
+        u8"APERÇU ET INVENTAIRE DE LA FERME EN DIRECT",
+        u8"PANORAMICA E INVENTARIO DELLA FATTORIA DAL VIVO",
+        u8"PRZEGLĄD I INWENTARYZACJA FARMY NA ŻYWO",
+        u8"LIVE BOERDERIJOVERZICHT & INVENTARIS",
+    } },
+    { u8"Select an instance and slot to view real-time AI-extracted data.", {
+        u8"Yapay zekanın oyundan çektiği anlık verileri görmek için hesap seçin.",
+        u8"Seleccione una instancia y una ranura para ver datos extraídos de IA en tiempo real.",
+        u8"Selecione uma instância e um slot para visualizar dados extraídos de IA em tempo real.",
+        u8"Выберите экземпляр и слот для просмотра данных, извлеченных с помощью ИИ, в реальном времени.",
+        u8"Wählen Sie eine Instanz und einen Slot aus, um KI-extrahierte Daten in Echtzeit anzuzeigen.",
+        u8"Sélectionnez une instance et un emplacement pour afficher les données extraites par l'IA en temps réel.",
+        u8"Seleziona un'istanza e uno slot per visualizzare i dati estratti dall'intelligenza artificiale in tempo reale.",
+        u8"Wybierz instancję i miejsce, aby wyświetlić dane wyodrębnione przez sztuczną inteligencję w czasie rzeczywistym.",
+        u8"Selecteer een instantie en slot om realtime door AI geëxtraheerde gegevens te bekijken.",
+    } },
+    { u8"Instance##info", {
+        u8"Bot##info",
+        u8"Instancia##info",
+        u8"Instance##info",
+        u8"Экземпляр##info",
+        u8"Instanz##info",
+        u8"Instance##info",
+        u8"Istanza##info",
+        u8"Instancja##info",
+        u8"Instantie##info",
+    } },
+    { u8"Slot##info", {
+        u8"Hesap##info",
+        u8"Ranura##info",
+        u8"Slot##info",
+        u8"Слот##info",
+        u8"Steckplatz##info",
+        u8"Emplacement##info",
+        u8"Slot##info",
+        u8"Gniazdo##info",
+        u8"Sleuf##info",
+    } },
+    { u8"Player Tag: ", {
+        u8"Oyuncu Etiketi: ",
+        u8"Etiqueta de jugador: ",
+        u8"Player Tag: ",
+        u8"Тег игрока: ",
+        u8"Spieler-Tag: ",
+        u8"Balise du joueur : ",
+        u8"Tag giocatore: ",
+        u8"Znacznik gracza: ",
+        u8"Spelertag: ",
+    } },
+    { u8"Coins: %d", {
+        u8"Altın: %d",
+        u8"Monedas: %d",
+        u8"Moedas: %d",
+        u8"Монеты: %d",
+        u8"Münzen: %d",
+        u8"Pièces : %d",
+        u8"Monete: %d",
+        u8"Monety: %d",
+        u8"Munten: %d",
+    } },
+    { u8"Diamonds: %d", {
+        u8"Elmas: %d",
+        u8"Diamantes: %d",
+        u8"Diamantes: %d",
+        u8"Бриллианты: %d",
+        u8"Diamanten: %d",
+        u8"Diamants : %d",
+        u8"Diamanti: %d",
+        u8"Diamenty: %d",
+        u8"Diamanten: %d",
+    } },
+    { u8"[ BARN EXPANSION ]", {
+        u8"[ AMBAR MALZEMELERİ ]",
+        u8"[ EXPANSIÓN DEL GRANERO ]",
+        u8"[ EXPANSÃO DO CELEIRO ]",
+        u8"[ РАСШИРЕНИЕ САРАТА ]",
+        u8"[ SCHEUNENERWEITERUNG ]",
+        u8"[ Agrandissement de la grange ]",
+        u8"[ ESPANSIONE FIENILE ]",
+        u8"[ ROZBUDOWA STODOŁY ]",
+        u8"[ UITBREIDING SCHUUR ]",
+    } },
+    { u8"Bolt: %d %s", {
+        u8"Cıvata: %d %s",
+        u8"Perno: %d %s",
+        u8"Parafuso: %d %s",
+        u8"Болт: %d %s",
+        u8"Bolzen: %d %s",
+        u8"Boulon : %d %s",
+        u8"Bullone: %d %s",
+        u8"Śruba: %d %s",
+        u8"Bout: %d %s",
+    } },
+    { u8"Plank: %d %s", {
+        u8"Kalas: %d %s",
+        u8"Tablón: %d %s",
+        u8"Prancha: %d %s",
+        u8"Планка: %d %s",
+        u8"Planke: %d %s",
+        u8"Planche : %d %s",
+        u8"Tavola: %d %s",
+        u8"Deska: %d %s",
+        u8"Plank: %d %s",
+    } },
+    { u8"Tape: %d %s", {
+        u8"Bant: %d %s",
+        u8"Cinta: %d %s",
+        u8"Fita: %d %s",
+        u8"Лента: %d %s",
+        u8"Band: %d %s",
+        u8"Bande : %d %s",
+        u8"Nastro: %d %s",
+        u8"Taśma: %d %s",
+        u8"Band: %d %s",
+    } },
+    { u8"[ SILO EXPANSION ]", {
+        u8"[ SİLO MALZEMELERİ ]",
+        u8"[ EXPANSIÓN SILO ]",
+        u8"[ EXPANSÃO DO SILO ]",
+        u8"[ РАСШИРЕНИЕ БАНКОВ ]",
+        u8"[ SILO-ERWEITERUNG ]",
+        u8"[ EXPANSION DU SILO ]",
+        u8"[ ESPANSIONE SILO ]",
+        u8"[ ROZBUDOWA SILOSU ]",
+        u8"[ SILO-UITBREIDING ]",
+    } },
+    { u8"Nail: %d %s", {
+        u8"Çivi: %d %s",
+        u8"Clavo: %d %s",
+        u8"Prego: %d %s",
+        u8"Гвоздь: %d %s",
+        u8"Nagel: %d %s",
+        u8"Clou : %d %s",
+        u8"Chiodo: %d %s",
+        u8"Gwóźdź: %d %s",
+        u8"Nagel: %d %s",
+    } },
+    { u8"Screw: %d %s", {
+        u8"Vida: %d %s",
+        u8"Tornillo: %d %s",
+        u8"Parafuso: %d %s",
+        u8"Винт: %d %s",
+        u8"Schraube: %d %s",
+        u8"Vis : %d %s",
+        u8"Vite: %d %s",
+        u8"Śruba: %d %s",
+        u8"Schroef: %d %s",
+    } },
+    { u8"Panel: %d %s", {
+        u8"Panel: %d %s",
+        u8"Panel: %d %s",
+        u8"Painel: %d %s",
+        u8"Панель: %d %s",
+        u8"Panel: %d %s",
+        u8"Panneau : %d %s",
+        u8"Pannello: %d %s",
+        u8"Panel: %d %s",
+        u8"Paneel: %d %s",
+    } },
+    { u8"[ LAND EXPANSION ]", {
+        u8"[ ARAZİ MALZEMELERİ ]",
+        u8"[ EXPANSIÓN TERRENO ]",
+        u8"[ EXPANSÃO DO TERRENO ]",
+        u8"[ РАСШИРЕНИЕ ЗЕМЛИ ]",
+        u8"[LANDERWEITERUNG]",
+        u8"[ Agrandissement du terrain ]",
+        u8"[ ESPANSIONE TERRENO ]",
+        u8"[ POWIĘKSZANIE TERENU ]",
+        u8"[ GRONDUITBREIDING ]",
+    } },
+    { u8"Deed: %d %s", {
+        u8"Tapu: %d %s",
+        u8"Escritura: %d %s",
+        u8"Escritura: %d %s",
+        u8"Акт: %d %s",
+        u8"Urkunde: %d %s",
+        u8"Acte : %d %s",
+        u8"Atto: %d %s",
+        u8"Czyn: %d %s",
+        u8"Akte: %d %s",
+    } },
+    { u8"Mallet: %d %s", {
+        u8"Tokmak: %d %s",
+        u8"Mazo: %d %s",
+        u8"Marreta: %d %s",
+        u8"Молоток: %d %s",
+        u8"Hammer: %d %s",
+        u8"Maillet : %d %s",
+        u8"Maglio: %d %s",
+        u8"Młotek: %d %s",
+        u8"Hamer: %d %s",
+    } },
+    { u8"Marker: %d %s", {
+        u8"İşaretçi: %d %s",
+        u8"Marcador: %d %s",
+        u8"Marcador: %d %s",
+        u8"Маркер: %d %s",
+        u8"Markierung: %d %s",
+        u8"Marqueur : %d %s",
+        u8"Indicatore: %d %s",
+        u8"Znacznik: %d %s",
+        u8"Markering: %d %s",
+    } },
+    { u8"Map: %d %s", {
+        u8"Harita: %d %s",
+        u8"Mapa: %d %s",
+        u8"Mapa: %d %s",
+        u8"Карта: %d %s",
+        u8"Karte: %d %s",
+        u8"Carte : %d %s",
+        u8"Mappa: %d %s",
+        u8"Mapa: %d %s",
+        u8"Kaart: %d %s",
+    } },
+    { u8"SYSTEM EVENT LOGS", {
+        u8"SİSTEM OLAY KAYITLARI",
+        u8"REGISTROS DE EVENTOS DEL SISTEMA",
+        u8"REGISTROS DE EVENTOS DO SISTEMA",
+        u8"ЖУРНАЛЫ СИСТЕМНЫХ СОБЫТИЙ",
+        u8"SYSTEMEREIGNISPROTOKOLLE",
+        u8"JOURNAUX D'ÉVÉNEMENTS SYSTÈME",
+        u8"REGISTRI EVENTI DI SISTEMA",
+        u8"DZIENNIKI ZDARZEŃ SYSTEMOWYCH",
+        u8"SYSTEEMGEBEURTENISLOGBOEKEN",
+    } },
+    { u8"CLEAR LOGS", {
+        u8"LOGLARI TEMİZLE",
+        u8"LIMPIAR REGISTROS",
+        u8"LIMPAR REGISTROS",
+        u8"ОЧИСТИТЬ ЖУРНАЛЫ",
+        u8"PROTOKOLLE LÖSCHEN",
+        u8"EFFACER LES JOURNAUX",
+        u8"CANCELLAZIONE REGISTRI",
+        u8"WYCZYŚĆ DZIENNIKI",
+        u8"LOGBOEK WISSEN",
+    } },
+    { u8"Auto-Scroll", {
+        u8"Otomatik Kaydır",
+        u8"Desplazamiento auto.",
+        u8"Rolagem Automática",
+        u8"Автопрокрутка",
+        u8"Autom. Scrollen",
+        u8"Défilement automatique",
+        u8"Scorrimento automatico",
+        u8"Automatyczne przewijanie",
+        u8"Automatisch scrollen",
+    } },
+    { u8"Filter:", {
+        u8"Filtre:",
+        u8"Filtro:",
+        u8"Filtro:",
+        u8"Фильтр:",
+        u8"Filter:",
+        u8"Filtre :",
+        u8"Filtro:",
+        u8"Filtr:",
+        u8"Filteren:",
+    } },
+    { u8"ALL", {
+        u8"HEPSİ",
+        u8"TODOS",
+        u8"TODOS",
+        u8"ВСЕ",
+        u8"ALLE",
+        u8"TOUS",
+        u8"TUTTI",
+        u8"WSZYSTKO",
+        u8"ALLES",
+    } },
+    { u8"INST #1", {
+        u8"BOT #1",
+        u8"BOT #1",
+        u8"BOT #1",
+        u8"БОТ #1",
+        u8"BOT #1",
+        u8"INST #1",
+        u8"IST #1",
+        u8"INSTRUKCJA #1",
+        u8"INST#1",
+    } },
+    { u8"INST #2", {
+        u8"BOT #2",
+        u8"INST #2",
+        u8"INST #2",
+        u8"ИНСТ #2",
+        u8"INST #2",
+        u8"INST #2",
+        u8"INST #2",
+        u8"INSTRUKCJA #2",
+        u8"INST#2",
+    } },
+    { u8"INST #3", {
+        u8"BOT #3",
+        u8"INST #3",
+        u8"INST.#3",
+        u8"ИНСТ №3",
+        u8"INST #3",
+        u8"INST #3",
+        u8"INST #3",
+        u8"INSTRUKCJA #3",
+        u8"INST #3",
+    } },
+    { u8"INST #4", {
+        u8"BOT #4",
+        u8"INST #4",
+        u8"INST.#4",
+        u8"ИНСТ #4",
+        u8"INST #4",
+        u8"INST #4",
+        u8"INST #4",
+        u8"INSTRUKCJA #4",
+        u8"INST#4",
+    } },
+    { u8"INST #5", {
+        u8"BOT #5",
+        u8"INST #5",
+        u8"INST.#5",
+        u8"ИНСТ #5",
+        u8"INST #5",
+        u8"INST #5",
+        u8"IST #5",
+        u8"INSTRUKCJA #5",
+        u8"INST #5",
+    } },
+    { u8"INST #6", {
+        u8"BOT #6",
+        u8"INST #6",
+        u8"INST.#6",
+        u8"ИНСТ #6",
+        u8"INST #6",
+        u8"INST #6",
+        u8"INST #6",
+        u8"INSTRUKCJA #6",
+        u8"INST #6",
+    } },
+    { u8"[SYSTEM]", {
+        u8"[SİSTEM]",
+        u8"[SISTEMA]",
+        u8"[SISTEMA]",
+        u8"[СИСТЕМА]",
+        u8"[SYSTEM]",
+        u8"[SYSTÈME]",
+        u8"[SISTEMA]",
+        u8"[SYSTEM]",
+        u8"[SYSTEEM]",
+    } },
+    { u8"[INST ", {
+        u8"[INST ",
+        u8"[INST ",
+        u8"[INST ",
+        u8"[ИНСТ ",
+        u8"[INST ",
+        u8"[INST ",
+        u8"[INST ",
+        u8"[INST ",
+        u8"[INST ",
+    } },
+    { u8"TEMPLATE CONFIGURATION & MAKER", {
+        u8"ŞABLON AYARLARI VE OLUŞTURUCU",
+        u8"CONFIGURACIÓN Y CREADOR DE PLANTILLAS",
+        u8"CONFIGURAÇÃO DE MODELOS E CRIADOR",
+        u8"НАСТРОЙКА И СОЗДАТЕЛЬ ШАБЛОНОВ",
+        u8"VORLAGEN-KONFIGURATION & ERSTELLER",
+        u8"CONFIGURATION ET CRÉATION DE MODÈLES",
+        u8"CONFIGURAZIONE E CREATORE DEL MODELLO",
+        u8"KONFIGURACJA I TWORZENIE SZABLONÓW",
+        u8"SJABLOONCONFIGURATIE & MAKER",
+    } },
+    { u8"Configuration", {
+        u8"Yapılandırma",
+        u8"Configuración",
+        u8"Configuração",
+        u8"Конфигурация",
+        u8"Konfiguration",
+        u8"Configuration",
+        u8"Configurazione",
+        u8"Konfiguracja",
+        u8"Configuratie",
+    } },
+    { u8"Separate all templates for each instance", {
+        u8"Her bot için şablonları ayrı tut",
+        u8"Separe todas las plantillas para cada instancia",
+        u8"Separe todos os templates para cada instância",
+        u8"Отдельные все шаблоны для каждого экземпляра.",
+        u8"Trennen Sie alle Vorlagen für jede Instanz",
+        u8"Séparez tous les modèles pour chaque instance",
+        u8"Separare tutti i modelli per ciascuna istanza",
+        u8"Oddziel wszystkie szablony dla każdej instancji",
+        u8"Scheid alle sjablonen voor elke instantie",
+    } },
+    { u8"(Checked = Use templates_0, templates_1...)", {
+        u8"(İşaretli = Şablonları_0, şablonları_1 kullan...)",
+        u8"(Marcado = Usar plantillas_0, plantillas_1...)",
+        u8"(Marcado = Usar templates_0, templates_1...)",
+        u8"(Отмечено = Использовать шаблоны_0, шаблоны_1...)",
+        u8"(Aktiviert = Vorlagen_0, Vorlagen_1 verwenden...)",
+        u8"(Coché = Utiliser templates_0, templates_1...)",
+        u8"(selezionato = Usa templates_0, templates_1...)",
+        u8"(Zaznaczone = Użyj szablonów_0, szablonów_1...)",
+        u8"(Aangevinkt = Gebruik templates_0, templates_1...)",
+    } },
+    { u8"GAME CHECKERS", {
+        u8"OYUN KONTROLCÜLERİ",
+        u8"JUEGO DE DAMAS",
+        u8"VERIFICADORES DE JOGO",
+        u8"ИГРОВЫЕ ШАШКИ",
+        u8"SPIELCHECKER",
+        u8"JEU DE DAMES",
+        u8"DAMA DA GIOCO",
+        u8"GRA W warcaby",
+        u8"SPELCHECKERS",
+    } },
+    { u8"Mailbox", {
+        u8"Posta Kutusu",
+        u8"Buzón",
+        u8"Caixa de correio",
+        u8"Почтовый ящик",
+        u8"Postfach",
+        u8"Boîte aux lettres",
+        u8"Casella di posta",
+        u8"Skrzynka pocztowa",
+        u8"Postbus",
+    } },
+    { u8"FARMING TEMPLATES", {
+        u8"TARIM ŞABLONLARI",
+        u8"PLANTILLAS AGRÍCOLAS",
+        u8"MODELOS DE AGRICULTURA",
+        u8"ШАБЛОНЫ ФЕРМЕРСТВА",
+        u8"LANDWIRTSCHAFTSVORLAGEN",
+        u8"MODÈLES D'AGRICULTURE",
+        u8"MODELLI AGRICOLI",
+        u8"SZABLONY ROLNICZE",
+        u8"LANDBOUW-SJABLONEN",
+    } },
+    { u8"Field", {
+        u8"Tarla",
+        u8"Campo",
+        u8"Campo",
+        u8"Поле",
+        u8"Feld",
+        u8"Champ",
+        u8"Campo",
+        u8"Pole",
+        u8"Veld",
+    } },
+    { u8"Wheat", {
+        u8"Buğday",
+        u8"Trigo",
+        u8"Trigo",
+        u8"Пшеница",
+        u8"Weizen",
+        u8"Blé",
+        u8"Grano",
+        u8"Pszenica",
+        u8"Tarwe",
+    } },
+    { u8"Sickle", {
+        u8"Tırpan",
+        u8"Hoz",
+        u8"Foice",
+        u8"Серп",
+        u8"Sichel",
+        u8"Faucille",
+        u8"Falce",
+        u8"Sierp",
+        u8"Sikkel",
+    } },
+    { u8"Corn Seed", {
+        u8"Mısır Tohumu",
+        u8"Semilla de Maíz",
+        u8"Semente de Milho",
+        u8"Семена кукурузы",
+        u8"Maissamen",
+        u8"Semence de maïs",
+        u8"Seme di mais",
+        u8"Nasiona kukurydzy",
+        u8"Maïszaad",
+    } },
+    { u8"Carrot Seed", {
+        u8"Havuç Tohumu",
+        u8"Semilla de Zanahoria",
+        u8"Semente de Cenoura",
+        u8"Семена моркови",
+        u8"Karottensamen",
+        u8"Graine de Carotte",
+        u8"Seme di carota",
+        u8"Nasiona Marchew",
+        u8"Wortelzaad",
+    } },
+    { u8"Carrot Shop", {
+        u8"Havuç (Dükkan)",
+        u8"Tienda de Zanahorias",
+        u8"Loja de cenouras",
+        u8"Магазин моркови",
+        u8"Karottenladen",
+        u8"Magasin de carottes",
+        u8"Negozio di carote",
+        u8"Sklep z marchewką",
+        u8"Wortelwinkel",
+    } },
+    { u8"Soybean Seed", {
+        u8"Soya Tohumu",
+        u8"Semilla de Soja",
+        u8"Semente de Soja",
+        u8"Семена сои",
+        u8"Sojabohnensamen",
+        u8"Graine de soja",
+        u8"Seme di soia",
+        u8"Nasiona soi",
+        u8"Sojabonenzaad",
+    } },
+    { u8"Soybean Shop", {
+        u8"Soya (Dükkan)",
+        u8"Tienda de soja",
+        u8"Loja de soja",
+        u8"Магазин соевых бобов",
+        u8"Sojabohnen-Shop",
+        u8"Boutique de soja",
+        u8"Negozio di semi di soia",
+        u8"Sklep z soją",
+        u8"Sojabonenwinkel",
+    } },
+    { u8"Sugarcane Seed", {
+        u8"Şeker Kamışı Tohumu",
+        u8"Semilla de caña de azúcar",
+        u8"Semente de Cana-de-Açúcar",
+        u8"Семена сахарного тростника",
+        u8"Zuckerrohrsamen",
+        u8"Graine de canne à sucre",
+        u8"Seme di canna da zucchero",
+        u8"Nasiona trzciny cukrowej",
+        u8"Suikerrietzaad",
+    } },
+    { u8"Sugarcane Shop", {
+        u8"Şeker Kamışı (Dükkan)",
+        u8"Tienda de caña de azúcar",
+        u8"Loja de cana-de-açúcar",
+        u8"Магазин сахарного тростника",
+        u8"Zuckerrohrladen",
+        u8"Magasin de canne à sucre",
+        u8"Negozio di canna da zucchero",
+        u8"Sklep z trzciną cukrową",
+        u8"Suikerrietwinkel",
+    } },
+    { u8"SHOP TEMPLATES", {
+        u8"DÜKKAN ŞABLONLARI",
+        u8"COMPRAR PLANTILLAS",
+        u8"MODELOS DE LOJA",
+        u8"ШАБЛОНЫ МАГАЗИНА",
+        u8"SHOP-VORLAGEN",
+        u8"MODÈLES DE BOUTIQUE",
+        u8"MODELLI DI NEGOZIO",
+        u8"SZABLONY SKLEPU",
+        u8"WINKEL-SJABLONEN",
+    } },
+    { u8"Shop", {
+        u8"Dükkan",
+        u8"Tienda",
+        u8"Loja",
+        u8"Магазин",
+        u8"Einkaufen",
+        u8"Boutique",
+        u8"Negozio",
+        u8"Sklep",
+        u8"Winkel",
+    } },
+    { u8"Wheat Shop", {
+        u8"Buğday (Dükkan)",
+        u8"Tienda de trigo",
+        u8"Loja de Trigo",
+        u8"Магазин пшеницы",
+        u8"Weizenladen",
+        u8"Magasin de blé",
+        u8"Negozio di grano",
+        u8"Sklep z pszenicą",
+        u8"Tarwewinkel",
+    } },
+    { u8"Corn Shop", {
+        u8"Mısır (Dükkan)",
+        u8"Tienda de maíz",
+        u8"Loja de milho",
+        u8"Кукурузный магазин",
+        u8"Maisladen",
+        u8"Magasin de maïs",
+        u8"Negozio di mais",
+        u8"Sklep z kukurydzą",
+        u8"Maïswinkel",
+    } },
+    { u8"Crate", {
+        u8"Boş Kasa",
+        u8"Caja",
+        u8"Caixa",
+        u8"Ящик",
+        u8"Kiste",
+        u8"Caisse",
+        u8"Cassa",
+        u8"Skrzynia",
+        u8"Krat",
+    } },
+    { u8"UI TEMPLATES", {
+        u8"ARAYÜZ ŞABLONLARI",
+        u8"PLANTILLAS DE UI",
+        u8"MODELOS DE IU",
+        u8"ШАБЛОНЫ пользовательского интерфейса",
+        u8"UI-VORLAGEN",
+        u8"MODÈLES D'INTERFACE UTILISATEUR",
+        u8"MODELLI DI IU",
+        u8"SZABLONY Interfejsu użytkownika",
+        u8"UI-SJABLONEN",
+    } },
+    { u8"Cross", {
+        u8"Çarpı (X)",
+        u8"Cruz",
+        u8"Cruz",
+        u8"Крест",
+        u8"Kreuz",
+        u8"Croix",
+        u8"Croce",
+        u8"Krzyż",
+        u8"Kruis",
+    } },
+    { u8"Create Sale", {
+        u8"Satış Oluştur",
+        u8"Crear venta",
+        u8"Criar venda",
+        u8"Создать продажу",
+        u8"Verkauf erstellen",
+        u8"Créer une vente",
+        u8"Crea vendita",
+        u8"Utwórz sprzedaż",
+        u8"Verkoop aanmaken",
+    } },
+    { u8"Advertise", {
+        u8"Reklam Ver",
+        u8"Publicidad",
+        u8"Anunciar",
+        u8"Реклама",
+        u8"Werben",
+        u8"Annoncer",
+        u8"Pubblicizza",
+        u8"Reklamuj",
+        u8"Adverteren",
+    } },
+    { u8"Level Up", {
+        u8"Seviye Atlama",
+        u8"Subir de nivel",
+        u8"Subir de nível",
+        u8"Повышение уровня",
+        u8"Levelaufstieg",
+        u8"Niveau supérieur",
+        u8"Sali di livello",
+        u8"Poziom wyżej",
+        u8"Niveau omhoog",
+    } },
+    { u8"Level Up Cont.", {
+        u8"Seviye Devam",
+        u8"Subir nivel Contin.",
+        u8"Cont. de subida de nível.",
+        u8"Повышение уровня, продолжение.",
+        u8"Levelaufstieg Fortsetzung.",
+        u8"Niveau supérieur suite.",
+        u8"Sali di livello Cont.",
+        u8"Poziom wyższy, ciąg dalszy",
+        u8"Niveau omhoog vervolg.",
+    } },
+    { u8"Template Maker", {
+        u8"Şablon Oluşturucu",
+        u8"Creador de Plantillas",
+        u8"Criador de Modelos",
+        u8"Создатель шаблонов",
+        u8"Vorlagen-Ersteller",
+        u8"Créateur de modèles",
+        u8"Creatore di modelli",
+        u8"Kreator szablonów",
+        u8"Sjablonenmaker",
+    } },
+    { u8"CREATE YOUR OWN TEMPLATES", {
+        u8"KENDİ ŞABLONLARINI OLUŞTUR",
+        u8"CREA TUS PROPIAS PLANTILLAS",
+        u8"CRIE SEUS PRÓPRIOS MODELOS",
+        u8"СОЗДАЙТЕ СОБСТВЕННЫЕ ШАБЛОНЫ",
+        u8"ERSTELLEN SIE IHRE EIGENEN VORLAGEN",
+        u8"CRÉEZ VOS PROPRES MODÈLES",
+        u8"CREA I TUOI MODELLI",
+        u8"UTWÓRZ WŁASNE SZABLONY",
+        u8"MAAK JE EIGEN SJABLONEN",
+    } },
+    { u8"If the bot cannot find objects, use this tool to capture a fresh screen.", {
+        u8"Bot nesneleri bulamazsa yeni bir ekran yakalamak için bu aracı kullanın.",
+        u8"Si el bot no puede encontrar objetos, use esta herramienta para capturar una pantalla nueva.",
+        u8"Se o bot não conseguir encontrar objetos, use esta ferramenta para capturar uma nova tela.",
+        u8"Если бот не может найти объекты, используйте этот инструмент, чтобы сделать снимок нового экрана.",
+        u8"Wenn der bot keine Objekte finden kann, verwenden Sie dieses Tool, um einen neuen Bildschirm zu erfassen.",
+        u8"Si le bot ne trouve pas d'objets, utilisez cet outil pour capturer un nouvel écran.",
+        u8"Se bot non riesce a trovare gli oggetti, utilizzare questo strumento per acquisire una nuova schermata.",
+        u8"Jeśli bot nie może znaleźć obiektów, użyj tego narzędzia, aby przechwycić nowy ekran.",
+        u8"Als de bot geen objecten kan vinden, gebruik dan deze tool om een nieuw scherm vast te leggen.",
+    } },
+    { u8"Open the saved screenshot in Paint, crop the item, and overwrite it in /templates.", {
+        u8"Kaydedilen ekran görüntüsünü Paint'te açın, öğeyi kırpın ve /templates'te üzerine yazın.",
+        u8"Abra la captura de pantalla guardada en Paint, recorte el elemento y sobrescríbalo en /templates.",
+        u8"Abra a captura de tela salva no Paint, corte o item e substitua-o em /templates.",
+        u8"Откройте сохраненный снимок экрана в Paint, обрежьте его и перезапишите его в /templates.",
+        u8"Öffnen Sie den gespeicherten Screenshot in Paint, schneiden Sie das Element zu und überschreiben Sie es in /templates.",
+        u8"Ouvrez la capture d'écran enregistrée dans Paint, recadrez l'élément et écrasez-le dans /templates.",
+        u8"Apri lo screenshot salvato in Paint, ritaglia l'elemento e sovrascrivilo in /templates.",
+        u8"Otwórz zapisany zrzut ekranu w programie Paint, przytnij element i nadpisz go w /templates.",
+        u8"Open de opgeslagen schermafbeelding in Paint, snijd het item bij en overschrijf het in /templates.",
+    } },
+    { u8"Select Emulator to Capture##tmpl", {
+        u8"Yakalanacak Emülatörü Seçin##tmpl",
+        u8"Seleccione el emulador para capturar##tmpl",
+        u8"Selecione o emulador para capturar##tmpl",
+        u8"Выберите эмулятор для захвата##tmpl",
+        u8"Wählen Sie den zu erfassenden Emulator aus##tmpl",
+        u8"Sélectionnez l'émulateur à capturer##tmpl",
+        u8"Seleziona l'emulatore da acquisire##tmpl",
+        u8"Wybierz emulator do przechwycenia##tmpl",
+        u8"Selecteer de emulator om vast te leggen##tmpl",
+    } },
+    { u8"TAKE SCREENSHOT (Save to /templates)", {
+        u8"EKRAN GÖRÜNTÜSÜ AL (/templates'e kaydet)",
+        u8"TOMAR CAPTURA DE PANTALLA",
+        u8"TIRAR CAPTURA DE TELA",
+        u8"СДЕЛАТЬ СКРИНШОТ",
+        u8"SCREENSHOT ERSTELLEN",
+        u8"PRENDRE UNE CAPTURE D'ÉCRAN (Enregistrer dans /templates)",
+        u8"REALIZZA SCREENSHOT (Salva in /modelli)",
+        u8"ZRÓB ZRZUT EKRANU (Zapisz w /templates)",
+        u8"SCREENSHOT MAKEN (Opslaan in /sjablonen)",
+    } },
+    { u8"Capturing...", {
+        u8"Yakalanıyor...",
+        u8"Capturando...",
+        u8"Capturando...",
+        u8"Захват...",
+        u8"Aufnahme...",
+        u8"Capture...",
+        u8"Cattura...",
+        u8"Przechwytywanie...",
+        u8"Vastleggen...",
+    } },
+    { u8"Error: Could not capture screen!", {
+        u8"Hata: Ekran yakalanamadı!",
+        u8"Error: ¡No se pudo capturar la pantalla!",
+        u8"Erro: não foi possível capturar a tela!",
+        u8"Ошибка: не удалось сделать снимок экрана!",
+        u8"Fehler: Bildschirm konnte nicht erfasst werden!",
+        u8"Erreur : Impossible de capturer l'écran !",
+        u8"Errore: impossibile acquisire la schermata!",
+        u8"Błąd: Nie można przechwycić ekranu!",
+        u8"Fout: Kan scherm niet vastleggen!",
+    } },
+    { u8"Screenshot failed: Empty frame.", {
+        u8"Ekran görüntüsü başarısız: Boş kare.",
+        u8"Captura de pantalla fallida: Fotograma vacío.",
+        u8"Falha na captura de tela: Quadro vazio.",
+        u8"Сбой скриншота: Пустой кадр.",
+        u8"Screenshot fehlgeschlagen: Leeres Frame.",
+        u8"Échec de la capture d'écran : frame vide.",
+        u8"Screenshot non riuscito: vuoto frame.",
+        u8"Zrzut ekranu nie powiódł się: Puste frame.",
+        u8"Screenshot mislukt: Lege frame.",
+    } },
+    { u8"Saved: ", {
+        u8"Kaydedildi: ",
+        u8"Guardado: ",
+        u8"Salvo: ",
+        u8"Сохранено: ",
+        u8"Gespeichert: ",
+        u8"Enregistré : ",
+        u8"Salvato: ",
+        u8"Zapisano: ",
+        u8"Opgeslagen: ",
+    } },
+    { u8"Screenshot saved to: ", {
+        u8"Ekran görüntüsü şuraya kaydedildi: ",
+        u8"Captura de pantalla guardada en: ",
+        u8"Captura de tela salva em: ",
+        u8"Скриншот сохранен в: ",
+        u8"Screenshot gespeichert unter: ",
+        u8"Capture d'écran enregistrée dans : ",
+        u8"Screenshot salvato in: ",
+        u8"Zrzut ekranu zapisany w: ",
+        u8"Schermafbeelding opgeslagen op: ",
+    } },
+    { u8"Error: Write failed (Permissions?)", {
+        u8"Hata: Yazma başarısız oldu (İzinler?)",
+        u8"Error: Error de escritura (¿Permisos?)",
+        u8"Erro: falha na gravação (permissões?)",
+        u8"Ошибка: ошибка записи (разрешения?)",
+        u8"Fehler: Schreiben fehlgeschlagen (Berechtigungen?)",
+        u8"Erreur : échec de l'écriture (autorisations ?)",
+        u8"Errore: scrittura non riuscita (autorizzazioni?)",
+        u8"Błąd: Zapis nie powiódł się (uprawnienia?)",
+        u8"Fout: schrijven mislukt (rechten?)",
+    } },
+    { u8"Exception: File write error.", {
+        u8"İstisna: Dosya yazma hatası.",
+        u8"Excepción: Error de escritura de archivo.",
+        u8"Exceção: Erro de gravação de arquivo.",
+        u8"Исключение: ошибка записи файла.",
+        u8"Ausnahme: Dateischreibfehler.",
+        u8"Exception : erreur d'écriture de fichier.",
+        u8"Eccezione: errore di scrittura del file.",
+        u8"Wyjątek: Błąd zapisu pliku.",
+        u8"Uitzondering: schrijffout bestand.",
+    } },
+    { u8"Watch Tutorial", {
+        u8"Eğitimi İzle",
+        u8"Ver tutorial",
+        u8"Assistir ao tutorial",
+        u8"Посмотреть руководство",
+        u8"Tutorial ansehen",
+        u8"Regarder le didacticiel",
+        u8"Guarda il tutorial",
+        u8"Obejrzyj samouczek",
+        u8"Bekijk de handleiding",
+    } },
+    { u8"WEBHOOK & NOTIFICATIONS", {
+        u8"WEBHOOK ve BİLDİRİMLER",
+        u8"WEBHOOK & NOTIFICACIONES",
+        u8"WEBHOOK e NOTIFICAÇÕES",
+        u8"WEBHOOK И УВЕДОМЛЕНИЯ",
+        u8"WEBHOOK & NOTIFICATIONS",
+        u8"WEBHOOK ET NOTIFICATIONS",
+        u8"WEBHOOK E NOTIFICHE",
+        u8"WEBHOOK i POWIADOMIENIA",
+        u8"WEBHOOK & MELDINGEN",
+    } },
+    { u8"BARN & SILO NOTIFICATIONS", {
+        u8"AMBAR VE SİLO BİLDİRİMLERİ",
+        u8"NOTIFICACIONES DE GRANERO Y SILO",
+        u8"NOTIFICAÇÕES DE CELEIRO E SILO",
+        u8"УВЕДОМЛЕНИЯ ДЛЯ АМАРОВ И Бункеров",
+        u8"SCHEUNEN- UND SILO-BENACHRICHTIGUNGEN",
+        u8"NOTIFICATIONS GRANGE ET SILO",
+        u8"NOTIFICHE DI GRANI E SILO",
+        u8"POWIADOMIENIA W STODOŁACH I SILOSACH",
+        u8"SCHUUR- EN SILOMELDINGEN",
+    } },
+    { u8"Enable Webhook Notification", {
+        u8"Webhook Bildirimlerini Aç",
+        u8"Habilitar Webhook Notificación",
+        u8"Ativar notificação Webhook",
+        u8"Включить уведомление Webhook",
+        u8"Aktivieren Sie die Webhook-Benachrichtigung",
+        u8"Activer la notification Webhook",
+        u8"Abilita la notifica Webhook.",
+        u8"Włącz powiadomienie Webhook.",
+        u8"Schakel Webhook Melding in",
+    } },
+    { u8"Webhook URL:", {
+        u8"Webhook URL'si:",
+        u8"Webhook URL:",
+        u8"Webhook URL:",
+        u8"Webhook URL-адрес:",
+        u8"Webhook URL:",
+        u8"Webhook URL :",
+        u8"Webhook URL:",
+        u8"Webhook Adres URL:",
+        u8"Webhook URL:",
+    } },
+    { u8"Send Screenshot Image with Webhook", {
+        u8"Webhook ile Ekran Görüntüsü Gönder",
+        u8"Enviar imagen de captura de pantalla con Webhook",
+        u8"Enviar imagem de captura de tela com Webhook",
+        u8"Отправьте снимок экрана с помощью Webhook",
+        u8"Screenshot-Bild mit Webhook senden",
+        u8"Envoyer une capture d'écran avec Webhook",
+        u8"Invia immagine screenshot con Webhook",
+        u8"Wyślij obraz zrzutu ekranu za pomocą Webhook",
+        u8"Screenshotafbeelding verzenden met Webhook",
+    } },
+    { u8"If disabled, only the text report will be sent (Faster).", {
+        u8"Kapalıysa sadece metin raporu gider (Daha hızlı).",
+        u8"Si está deshabilitado, solo se enviará el informe de texto (Más rápido).",
+        u8"Se desabilitado, apenas o relatório de texto será enviado (Mais Rápido).",
+        u8"Если отключено, будет отправляться только текстовый отчет (быстрее).",
+        u8"Wenn deaktiviert, wird nur der Textbericht gesendet (schneller).",
+        u8"Si désactivé, seul le rapport texte sera envoyé (plus rapide).",
+        u8"Se disabilitato, verrà inviato solo il rapporto di testo (Più veloce).",
+        u8"Jeśli wyłączone, wysyłany będzie tylko raport tekstowy (szybciej).",
+        u8"Indien uitgeschakeld, wordt alleen het tekstrapport verzonden (Sneller).",
+    } },
+    { u8"Remote commands are no longer available. Webhook notifications remain available above.", {
+        u8"Uzaktan komutlar artık kullanılamıyor. Yukarıda Webhook bildirimleri mevcut olmaya devam ediyor.",
+        u8"Los comandos remotos ya no están disponibles. Las notificaciones Webhook siguen disponibles arriba.",
+        u8"Os comandos remotos não estão mais disponíveis. As notificações Webhook permanecem disponíveis acima.",
+        u8"Удаленные команды больше недоступны. Уведомления Webhook остаются доступными выше.",
+        u8"Remote-Befehle sind nicht mehr verfügbar. Webhook-Benachrichtigungen bleiben oben verfügbar.",
+        u8"Les commandes à distance ne sont plus disponibles. Les notifications Webhook restent disponibles ci-dessus.",
+        u8"I comandi remoti non sono più disponibili. Le notifiche Webhook rimangono disponibili sopra.",
+        u8"Polecenia zdalne nie są już dostępne. Powiadomienia Webhook pozostają dostępne powyżej.",
+        u8"Externe opdrachten zijn niet langer beschikbaar. Webhook-meldingen blijven hierboven beschikbaar.",
+    } },
+    { u8"GLOBAL APPLICATION SETTINGS", {
+        u8"GLOBAL UYGULAMA AYARLARI",
+        u8"AJUSTES GLOBALES DE APLICACIÓN",
+        u8"CONFIGURAÇÕES GLOBAIS DO APLICATIVO",
+        u8"ГЛОБАЛЬНЫЕ НАСТРОЙКИ ПРИЛОЖЕНИЯ",
+        u8"GLOBALE ANWENDUNGSEINSTELLUNGEN",
+        u8"PARAMÈTRES GÉNÉRAUX DE L'APPLICATION",
+        u8"IMPOSTAZIONI GLOBALI DELL'APPLICAZIONE",
+        u8"GLOBALNE USTAWIENIA APLIKACJI",
+        u8"ALGEMENE APPLICATIE-INSTELLINGEN",
+    } },
+    { u8"SAVE ALL SETTINGS", {
+        u8"TÜM AYARLARI KAYDET",
+        u8"GUARDAR TODOS LOS AJUSTES",
+        u8"SALVAR TODAS AS CONFIGURAÇÕES",
+        u8"СОХРАНИТЬ ВСЕ НАСТРОЙКИ",
+        u8"ALLE EINSTELLUNGEN SPEICHERN",
+        u8"ENREGISTRER TOUS LES PARAMÈTRES",
+        u8"SALVA TUTTE LE IMPOSTAZIONI",
+        u8"ZAPISZ WSZYSTKIE USTAWIENIA",
+        u8"BEWAAR ALLE INSTELLINGEN",
+    } },
+    { u8"Browse", {
+        u8"Gözat",
+        u8"Examinar",
+        u8"Procurar",
+        u8"Обзор",
+        u8"Durchsuchen",
+        u8"Parcourir",
+        u8"Sfoglia",
+        u8"Przeglądaj",
+        u8"Bladeren",
+    } },
+    { u8"Browse##memu", {
+        u8"Gözat##memu",
+        u8"Examinar##memu",
+        u8"Procurar##memu",
+        u8"Обзор##memu",
+        u8"Durchsuchen##memu",
+        u8"Parcourir##memu",
+        u8"Sfoglia##memu",
+        u8"Przeglądaj##memu",
+        u8"Bladeren##memu",
+    } },
+    { u8"TIMING & DELAY SETTINGS (Advanced)", {
+        u8"ZAMANLAMA VE GECİKME AYARLARI (Gelişmiş)",
+        u8"CONFIGURACIÓN DE TIEMPO Y RETARDO (Avanzado)",
+        u8"CONFIGURAÇÕES DE TEMPO E ATRASO (avançado)",
+        u8"НАСТРОЙКИ ВРЕМЕНИ И ЗАДЕРЖКИ (дополнительно)",
+        u8"ZEIT- UND VERZÖGERUNGSEINSTELLUNGEN (Erweitert)",
+        u8"PARAMÈTRES DE MINUTERIE ET DE RETARD (Avancé)",
+        u8"IMPOSTAZIONI DI TEMPORIZZAZIONE E RITARDO (Avanzate)",
+        u8"USTAWIENIA CZASÓW I OPÓŹNIEŃ (zaawansowane)",
+        u8"TIMING- EN VERTRAGINGSINSTELLINGEN (geavanceerd)",
+    } },
+    { u8"Adjust these values if your emulator is lagging or running too fast.", {
+        u8"Eğer emülatörünüz kasıyorsa veya çok hızlıysa bu ayarları değiştirin.",
+        u8"Ajuste estos valores si su emulador tiene retrasos o se ejecuta demasiado rápido.",
+        u8"Ajuste esses valores se o seu emulador estiver lento ou executando muito rápido.",
+        u8"Отрегулируйте эти значения, если ваш эмулятор тормозит или работает слишком быстро.",
+        u8"Passen Sie diese Werte an, wenn Ihr Emulator verzögert ist oder zu schnell läuft.",
+        u8"Ajustez ces valeurs si votre émulateur est en retard ou s'exécute trop vite.",
+        u8"Regola questi valori se il tuo emulatore è in ritardo o funziona troppo velocemente.",
+        u8"Dostosuj te wartości, jeśli emulator ma opóźnienia lub działa zbyt szybko.",
+        u8"Pas deze waarden aan als uw emulator achterloopt of te snel werkt.",
+    } },
+    { u8"Game Load Wait (Seconds)", {
+        u8"Oyun Yüklenme Beklemesi (Saniye)",
+        u8"Espera de carga del juego (segundos)",
+        u8"Espera de carregamento do jogo (segundos)",
+        u8"Ожидание загрузки игры (секунды)",
+        u8"Wartezeit beim Laden des Spiels (Sekunden)",
+        u8"Attente de chargement du jeu (secondes)",
+        u8"Attesa caricamento gioco (secondi)",
+        u8"Oczekiwanie na wczytanie gry (sekundy)",
+        u8"Wachttijd game laden (seconden)",
+    } },
+    { u8"Harvest Cooldown (ms)", {
+        u8"Hasat Sonrası Bekleme (ms)",
+        u8"Enfriamiento de cosecha (ms)",
+        u8"Tempo de Recarga da Colheita (ms)",
+        u8"Время восстановления Жатвы (мс)",
+        u8"Ernte-Abklingzeit (ms)",
+        u8"Temps de recharge de la récolte (ms)",
+        u8"Tempo di recupero del raccolto (ms)",
+        u8"Czas odnowienia żniw (ms)",
+        u8"Afkoelperiode oogst (ms)",
+    } },
+    { u8"Planting Cooldown (ms)", {
+        u8"Ekim Sonrası Bekleme (ms)",
+        u8"Enfriamiento de plantación (ms)",
+        u8"Tempo de espera de plantio (ms)",
+        u8"Время восстановления при посадке (мс)",
+        u8"Abklingzeit beim Pflanzen (ms)",
+        u8"Temps de recharge de plantation (ms)",
+        u8"Tempo di recupero della semina (ms)",
+        u8"Czas odnowienia sadzenia (ms)",
+        u8"Afkoelperiode planten (ms)",
+    } },
+    { u8"Shop Open Wait (ms)", {
+        u8"Dükkan Açılış Beklemesi (ms)",
+        u8"Espera de apertura de tienda (ms)",
+        u8"Aguarde abertura da loja (ms)",
+        u8"Ожидание открытия магазина (мс)",
+        u8"Warten auf Ladenöffnung (ms)",
+        u8"Attente d'ouverture de boutique (ms)",
+        u8"Attesa apertura negozio (ms)",
+        u8"Otwarcie sklepu, oczekiwanie (ms)",
+        u8"Winkel open wachten (ms)",
+    } },
+    { u8"Next Account Wait (ms)", {
+        u8"Diğer Hesaba Geçiş Beklemesi (ms)",
+        u8"Espera de siguiente cuenta (ms)",
+        u8"Espera da próxima conta (ms)",
+        u8"Ожидание следующего аккаунта (мс)",
+        u8"Nächstes Konto warten (ms)",
+        u8"Attente du compte suivant (ms)",
+        u8"Attesa account successivo (ms)",
+        u8"Oczekiwanie na następne konto (ms)",
+        u8"Volgende account wachten (ms)",
+    } },
+    { u8"Shop Automation Speeds:", {
+        u8"Dükkan Otomasyon Hızları:",
+        u8"Velocidades de automatización de talleres:",
+        u8"Velocidades de automação da loja:",
+        u8"Скорость автоматизации магазина:",
+        u8"Shop-Automatisierungsgeschwindigkeiten:",
+        u8"Vitesses d'automatisation des magasins :",
+        u8"Velocità di automazione del negozio:",
+        u8"Prędkości automatyzacji sklepu:",
+        u8"Snelheden winkelautomatisering:",
+    } },
+    { u8"Crate Menu Wait (ms)", {
+        u8"Kasa Menüsü Beklemesi (ms)",
+        u8"Espera del menú de caja (ms)",
+        u8"Espera do menu da caixa (ms)",
+        u8"Ожидание меню Crate (мс)",
+        u8"Wartezeit im Crate-Menü (ms)",
+        u8"Attente du menu Crate (ms)",
+        u8"Attesa menu cassa (ms)",
+        u8"Menu skrzynki Oczekiwanie (ms)",
+        u8"Kratmenu Wacht (ms)",
+    } },
+    { u8"Coin Collect Wait (ms)", {
+        u8"Altın Toplama Beklemesi (ms)",
+        u8"Espera de recogida de monedas (ms)",
+        u8"Espera de coleta de moedas (ms)",
+        u8"Ожидание сбора монет (мс)",
+        u8"Warten auf Münzsammeln (ms)",
+        u8"Attente de collecte de pièces (ms)",
+        u8"Attesa raccolta monete (ms)",
+        u8"Oczekiwanie na zbieranie monet (ms)",
+        u8"Wachttijd munten verzamelen (ms)",
+    } },
+    { u8"Product Select Wait (ms)", {
+        u8"Ürün Seçme Beklemesi (ms)",
+        u8"Espera de selección de producto (ms)",
+        u8"Espera de seleção do produto (ms)",
+        u8"Ожидание выбора продукта (мс)",
+        u8"Produktauswahl warten (ms)",
+        u8"Attente de sélection de produit (ms)",
+        u8"Attesa selezione prodotto (ms)",
+        u8"Wybór produktu Czekaj (ms)",
+        u8"Wachttijd productselectie (ms)",
+    } },
+    { u8"Create Sale Wait (ms)", {
+        u8"Satış Oluşturma Beklemesi (ms)",
+        u8"Crear espera de venta (ms)",
+        u8"Espera de criação de venda (ms)",
+        u8"Создание ожидания продажи (мс)",
+        u8"Verkaufswartezeit erstellen (ms)",
+        u8"Attente de création de vente (ms)",
+        u8"Attesa creazione vendita (ms)",
+        u8"Utwórz sprzedaż Oczekiwanie (ms)",
+        u8"Wachttijd voor verkoop creëren (ms)",
+    } },
+    { u8"Enable Discord Rich Presence", {
+        u8"Discord Rich Presence Aç",
+        u8"Habilitar Discord Presencia enriquecida",
+        u8"Ativar Discord Presença rica",
+        u8"Включить Discord расширенное присутствие",
+        u8"Aktivieren Sie Discord Rich Presence",
+        u8"Activer Discord Présence riche",
+        u8"Abilita Discord Rich Presence",
+        u8"Włącz Discord Bogatą obecność",
+        u8"Schakel Discord Rijke aanwezigheid in",
+    } },
+    { u8"(Show your bot status on Discord profile)", {
+        u8"(Bot durumunuzu Discord profilinizde gösterir)",
+        u8"(Muestra el estado de tu bot en el perfil Discord)",
+        u8"(Mostra o status do seu bot no perfil Discord)",
+        u8"(Покажите статус вашего бота в профиле Discord)",
+        u8"(Zeigen Sie Ihren bot-Status im Discord-Profil)",
+        u8"(Affichez votre statut bot sur le profil Discord)",
+        u8"(Mostra il tuo stato bot sul profilo Discord)",
+        u8"(Pokaż swój status bot w profilu Discord)",
+        u8"(Toon uw bot-status op Discord-profiel)",
+    } },
+    { u8"ABOUT", {
+        u8"HAKKINDA",
+        u8"ACERCA DE",
+        u8"SOBRE",
+        u8"О КОМПАНИИ",
+        u8"ÜBER",
+        u8"À PROPOS",
+        u8"INFORMAZIONI",
+        u8"O",
+        u8"OVER",
+    } },
+    { u8"Made by North", {
+        u8"North tarafından yapılmıştır",
+        u8"Hecho por Norte",
+        u8"Feito pela North",
+        u8"Сделано North",
+        u8"Hergestellt von North",
+        u8"Fabriqué par Nord",
+        u8"Realizzato da North",
+        u8"Wykonane przez firmę North",
+        u8"Gemaakt door Noord",
+    } },
+    { u8"Special thanks to: Nuron, Dext3r, K T and HugoAyaz for their contributions.", {
+        u8"Katkılarından dolayı Nuron, Dext3r, K T ve HugoAyaz'a özel teşekkürler.",
+        u8"Un agradecimiento especial a: Nuron, Dext3r, K T y HugoAyaz por sus contribuciones.",
+        u8"Agradecimentos especiais a: Nuron, Dext3r, K T e HugoAyaz por suas contribuições.",
+        u8"Особая благодарность: Nuron, Dext3r, K T и HugoAyaz за их вклад.",
+        u8"Special thanks to: Nuron, Dext3r, K T and HugoAyaz for their contributions.",
+        u8"Remerciements particuliers à : Nuron, Dext3r, K T et HugoAyaz pour leurs contributions.",
+        u8"Un ringraziamento speciale a: Nuron, Dext3r, K T e HugoAyaz per i loro contributi.",
+        u8"Specjalne podziękowania dla: Nurona, Dext3r, K T i HugoAyaza za ich wkład.",
+        u8"Speciale dank aan: Nuron, Dext3r, KT en HugoAyaz voor hun bijdragen.",
+    } },
+    { u8"NXRTH BOT - USER MANUAL", {
+        u8"NXRTH BOT - KULLANIM KILAVUZU",
+        u8"NXRTH BOT - MANUAL DE USUARIO",
+        u8"NXRTH BOT - MANUAL DO USUÁRIO",
+        u8"NXRTH БОТ - РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ",
+        u8"NXRTH BOT – BENUTZERHANDBUCH",
+        u8"NXRTH BOT - MANUEL D'UTILISATION",
+        u8"NXRTH BOT - MANUALE UTENTE",
+        u8"NXRTH BOT – INSTRUKCJA OBSŁUGI",
+        u8"NXRTH BOT - GEBRUIKERSHANDLEIDING",
+    } },
+    { u8"Need help? Contact @Nxr on the server.", {
+        u8"Yardıma mı ihtiyacınız var? Sunucuda @Nxr ile iletişime geçin.",
+        u8"¿Necesitas ayuda? Contacta a @Nxr en el servidor.",
+        u8"Precisa de ajuda? Contate @Nxr no servidor.",
+        u8"Нужна помощь? Свяжитесь с @Nxr на сервере.",
+        u8"Brauchen Sie Hilfe? Kontaktieren Sie @Nxr auf dem Server.",
+        u8"Besoin d'aide ? Contactez @Nxr sur le serveur.",
+        u8"Hai bisogno di aiuto? Contatta @Nxr sul server.",
+        u8"Potrzebujesz pomocy? Skontaktuj się z @Nxr na serwerze.",
+        u8"Hulp nodig? Neem contact op met @Nxr op de server.",
+    } },
+    { u8"1. Initial Setup & Minitouch", {
+        u8"1. İlk Kurulum & Minitouch",
+        u8"1. Configuración Inicial y Minitouch",
+        u8"1. Configuração Inicial e Minitouch",
+        u8"1. Начальная настройка и Minitouch",
+        u8"1. Ersteinrichtung & Minitouch",
+        u8"1. Configuration initiale et Minitouch",
+        u8"1. Configurazione iniziale e Minitouch",
+        u8"1. Konfiguracja wstępna i Minitouch",
+        u8"1. Initiële installatie en Minitouch",
+    } },
+    { u8"Before starting the bot, use Inject Important Files once for each emulator. It installs Minitouch and the required game assets.", {
+        u8"Botu başlatmadan önce her emülatör için Önemli Dosyaları Yükle işlemini bir kez çalıştırın. Bu işlem Minitouch'u ve gerekli oyun dosyalarını kurar.",
+        u8"Antes de comenzar el bot, usa Inyectar Archivos Importantes una vez por cada emulador. Esto instala Minitouch y los recursos del juego requeridos.",
+        u8"Antes de iniciar o bot, use Injetar Arquivos Importantes uma vez para cada emulador. Ele instala Minitouch e os ativos de jogo necessários.",
+        u8"Перед запуском bot используйте Инъекцию Важных Файлов один раз для каждого эмулятора. Это устанавливает Minitouch и необходимые игровые ресурсы.",
+        u8"Bevor Sie das bot starten, verwenden Sie einmalig „Wichtige Dateien einfügen“ für jeden Emulator. Es installiert Minitouch und die erforderlichen Spielassets.",
+        u8"Avant de commencer le bot, utilisez Inject Important Files une fois pour chaque émulateur. Cela installe Minitouch et les assets du jeu requis.",
+        u8"Prima di iniziare bot, usa Inietta File Importanti una volta per ogni emulatore. Installa Minitouch e le risorse di gioco richieste.",
+        u8"Przed rozpoczęciem bot, użyj funkcji Wstrzyknij Ważne Pliki raz dla każdego emulatora. Zainstaluje to Minitouch oraz wymagane zasoby gry.",
+        u8"Gebruik voordat je begint met de bot eenmaal de functie Belangrijke Bestanden Injecteren voor elke emulator. Het installeert Minitouch en de benodigde game-assets.",
+    } },
+    { u8"2. Bot Manager & Accounts", {
+        u8"2. Bot Yöneticisi & Hesaplar",
+        u8"2. Gestor de Bots y Cuentas",
+        u8"2. Gerenciador de Bots e Contas",
+        u8"2. Менеджер ботов и Аккаунты",
+        u8"2. Bot-Manager & Konten",
+        u8"2. Bot Gestionnaire et comptes",
+        u8"2. Bot Gestore e account",
+        u8"2. Bot Menedżer i konta",
+        u8"2. Bot Manager en accounts",
+    } },
+    { u8"Single-account mode repeats farming and sales on one account. Multi-account mode performs the same cycle and rotates through saved accounts.", {
+        u8"Tek hesap modu ekim, hasat ve satış döngüsünü tek hesapta tekrarlar. Çoklu hesap modu aynı döngüyü kayıtlı hesaplar arasında uygular.",
+        u8"El modo de una sola cuenta repite la agricultura y las ventas en una cuenta. El modo de múltiples cuentas realiza el mismo ciclo y rota entre las cuentas guardadas.",
+        u8"O modo de conta única repete farming e vendas em uma conta. O modo multi-conta realiza o mesmo ciclo e alterna entre as contas salvas.",
+        u8"Режим с одной учетной записью повторяет фарм и продажи на одной учетной записи. Режим с несколькими учетными записями выполняет тот же цикл и переключается между сохраненными учетными записями.",
+        u8"Der Einzelkonto-Modus wiederholt Farming und Verkäufe auf einem Konto. Der Mehrkonto-Modus führt denselben Zyklus aus und wechselt zwischen gespeicherten Konten.",
+        u8"Le mode compte unique répète l'exploitation et les ventes sur un seul compte. Le mode multi-comptes effectue le même cycle et fait tourner les comptes sauvegardés.",
+        u8"La modalità a singolo account ripete il farming e le vendite su un solo account. La modalità multi-account esegue lo stesso ciclo e ruota tra gli account salvati.",
+        u8"Tryb jednego konta powtarza farmienie i sprzedaż na jednym koncie. Tryb wielu kont wykonuje ten sam cykl i przełącza się między zapisanymi kontami.",
+        u8"Modus met één account herhaalt het farming- en verkoopproces op één account. Multi-accountmodus voert dezelfde cyclus uit en wisselt tussen opgeslagen accounts.",
+    } },
+    { u8"Save at least two accounts before enabling multi-account mode in Bot Manager.", {
+        u8"Bot Yöneticisi'nde çoklu hesap modunu açmadan önce en az iki hesap kaydedin.",
+        u8"Guarda al menos dos cuentas antes de habilitar el modo de múltiples cuentas en el Administrador Bot.",
+        u8"Salve pelo menos duas contas antes de ativar o modo multi-conta no Bot Manager.",
+        u8"Сохраните как минимум две учетные записи перед включением режима нескольких учетных записей в Менеджере Bot.",
+        u8"Speichern Sie mindestens zwei Konten, bevor Sie den Mehrkonto-Modus im Bot Manager aktivieren.",
+        u8"Sauvegardez au moins deux comptes avant d'activer le mode multi-comptes dans le Bot Manager.",
+        u8"Salva almeno due account prima di abilitare la modalità multi-account in Bot Manager.",
+        u8"Zapisz co najmniej dwa konta przed włączeniem trybu wielu kont w Menedżerze Bot.",
+        u8"Sla minimaal twee accounts op voordat je de multi-accountmodus inschakelt in Bot Manager.",
+    } },
+    { u8"To save an account, finish the tutorial, reach farm level 7, then use Save Game in Account Manager.", {
+        u8"Bir hesabı kaydetmek için öğreticiyi tamamlayın, çiftlik seviyesi 7'ye ulaşın ve Hesap Yöneticisi'ndeki Oyunu Kaydet seçeneğini kullanın.",
+        u8"Para guardar una cuenta, termina el tutorial, alcanza el nivel 7 de la granja y luego usa Guardar Juego en el Administrador de Cuentas.",
+        u8"Para salvar uma conta, termine o tutorial, alcance o nível 7 de farm e, em seguida, use Salvar Jogo no Gerenciador de Contas.",
+        u8"Чтобы сохранить учетную запись, завершите обучающий курс, достигните уровня фермы 7, затем используйте Сохранить Игру в Менеджере Учетных Записей.",
+        u8"Um ein Konto zu speichern, schließen Sie das Tutorial ab, erreichen Sie Farmstufe 7 und verwenden Sie dann „Spiel speichern“ im Kontomanager.",
+        u8"Pour sauvegarder un compte, terminez le tutoriel, atteignez le niveau de ferme 7, puis utilisez Sauvegarder le jeu dans le Gestionnaire de comptes.",
+        u8"Per salvare un account, termina il tutorial, raggiungi il livello 7 della fattoria, quindi usa Salva Gioco in Account Manager.",
+        u8"Aby zapisać konto, ukończ samouczek, osiągnij poziom farmy 7, a następnie użyj opcji Zapisz Grę w Menedżerze Kont.",
+        u8"Om een account op te slaan, voltooi de tutorial, bereik boerderijniveau 7, en gebruik vervolgens Spel Opslaan in Account Manager.",
+    } },
+    { u8"Use Load Slot to switch accounts manually. Only load slots that contain saved data.", {
+        u8"Hesapları elle değiştirmek için Hesabı Yükle seçeneğini kullanın. Yalnızca kayıtlı veri içeren hesapları yükleyin.",
+        u8"Usa Cargar Ranura para cambiar de cuenta manualmente. Solo carga ranuras que contengan datos guardados.",
+        u8"Use Carregar Slot para alternar contas manualmente. Só carregue slots que contenham dados salvos.",
+        u8"Используйте Загрузить Слот для ручного переключения учетных записей. Загружайте только слоты, содержащие сохраненные данные.",
+        u8"Verwenden Sie „Slot laden“, um Konten manuell zu wechseln. Laden Sie nur Slots, die gespeicherte Daten enthalten.",
+        u8"Utilisez Charger un emplacement pour changer de compte manuellement. Ne chargez que les emplacements contenant des données sauvegardées.",
+        u8"Usa Carica Slot per cambiare account manualmente. Carica solo slot che contengono dati salvati.",
+        u8"Użyj opcji Załaduj Slot, aby ręcznie przełączać konta. Ładuj tylko sloty, które zawierają zapisane dane.",
+        u8"Gebruik Laad Slot om handmatig van account te wisselen. Laad alleen slots die opgeslagen gegevens bevatten.",
+    } },
+    { u8"Do not save Supercell ID accounts. The cookie dialog can prevent automation from working.", {
+        u8"Supercell ID hesaplarını kaydetmeyin. Çerez penceresi otomasyonun çalışmasını engelleyebilir.",
+        u8"No guardes cuentas de Supercell ID. El diálogo de cookies puede impedir que la automatización funcione.",
+        u8"Não salve contas Supercell ID. O diálogo de cookies pode impedir que a automação funcione.",
+        u8"Не сохраняйте учетные записи Supercell ID. Диалоговое окно cookie может помешать работе автоматизации.",
+        u8"Speichern Sie keine Supercell ID Konten. Der Cookie-Dialog kann die Automatisierung verhindern.",
+        u8"Ne sauvegardez pas les comptes Supercell ID. La fenêtre des cookies peut empêcher le fonctionnement de l'automatisation.",
+        u8"Non salvare account di Supercell ID. Il dialogo dei cookie può impedire il funzionamento dell’automazione.",
+        u8"Nie zapisuj kont Supercell ID. Okno dialogowe ciasteczek może uniemożliwić działanie automatyzacji.",
+        u8"Sla geen Supercell ID-accounts op. Het cookiedialoogvenster kan verhinderen dat de automatisering werkt.",
+    } },
+    { u8"3. Auto Tom", {
+        u8"3. Auto Tom",
+        u8"3. Auto Tom",
+        u8"3. Auto Tom",
+        u8"3. Auto Tom",
+        u8"3. Auto Tom",
+        u8"3. Tom automatique",
+        u8"3. Tom automatico",
+        u8"3. Automatyczny tom",
+        u8"3. Automatische tom",
+    } },
+    { u8"Auto Tom is experimental and may require custom templates.", {
+        u8"Otomatik Tom deneyseldir ve özel şablonlar gerektirebilir.",
+        u8"Auto Tom es experimental y puede requerir plantillas personalizadas.",
+        u8"Auto Tom é experimental e pode exigir modelos personalizados.",
+        u8"Авто Том является экспериментальным и может потребовать пользовательские шаблоны.",
+        u8"Auto Tom ist experimentell und kann benutzerdefinierte Vorlagen erfordern.",
+        u8"Auto Tom est expérimental et peut nécessiter des modèles personnalisés.",
+        u8"Auto Tom è sperimentale e potrebbe richiedere modelli personalizzati.",
+        u8"Auto Tom jest eksperymentalny i może wymagać niestandardowych szablonów.",
+        u8"Auto Tom is experimenteel en kan aangepaste sjablonen vereisen.",
+    } },
+    { u8"Make sure Tom is available before enabling Auto Tom.", {
+        u8"Otomatik Tom'u açmadan önce Tom'un kullanılabilir olduğundan emin olun.",
+        u8"Asegúrate de que Tom esté disponible antes de habilitar Auto Tom.",
+        u8"Certifique-se de que Tom esteja disponível antes de ativar o Auto Tom.",
+        u8"Убедитесь, что Том доступен, перед включением Авто Том.",
+        u8"Stellen Sie sicher, dass Tom verfügbar ist, bevor Sie Auto Tom aktivieren.",
+        u8"Assurez-vous que Tom est disponible avant d'activer Auto Tom.",
+        u8"Assicurati che Tom sia disponibile prima di abilitare Auto Tom.",
+        u8"Upewnij się, że Tom jest dostępny, zanim włączysz Auto Tom.",
+        u8"Zorg ervoor dat Tom beschikbaar is voordat je Auto Tom inschakelt.",
+    } },
+    { u8"If Tom's crate is not detected, create a custom template from a fresh screenshot.", {
+        u8"Tom'un sandığı algılanmazsa güncel bir ekran görüntüsünden özel şablon oluşturun.",
+        u8"Si no se detecta la caja de Tom, crea una plantilla personalizada a partir de una captura de pantalla nueva.",
+        u8"Se a caixa de Tom não for detectada, crie um modelo personalizado a partir de uma nova captura de tela.",
+        u8"Если ящик Тома не обнаружен, создайте пользовательский шаблон с нового скриншота.",
+        u8"Wenn Tom's Kiste nicht erkannt wird, erstellen Sie eine benutzerdefinierte Vorlage von einem frischen Screenshot.",
+        u8"Si la caisse de Tom n'est pas détectée, créez un modèle personnalisé à partir d'une capture d'écran récente.",
+        u8"Se la cassa di Tom non viene rilevata, crea un modello personalizzato da uno screenshot nuovo.",
+        u8"Jeśli skrzynia Toma nie jest wykrywana, utwórz niestandardowy szablon z nowego zrzutu ekranu.",
+        u8"Als Toms krat niet wordt gedetecteerd, maak dan een aangepast sjabloon van een nieuwe screenshot.",
+    } },
+    { u8"4. Auto Transfer Bem/Sem", {
+        u8"4. Otomatik Transfer Bem/Sem",
+        u8"4. Auto Transferencia Bem/Sem",
+        u8"4. Transferência Automática Bem/Sem",
+        u8"4. Автопередача Bem/Sem",
+        u8"4. Auto-Transfer Bem/Sem",
+        u8"4. Transfert automatique Bem/Sem",
+        u8"4. Trasferimento automatico Bem/Sem",
+        u8"4. Automatyczny transfer Bem/Sem",
+        u8"4. Automatische overdracht bem/sem",
+    } },
+    { u8"Automatic BEM/SEM transfer is experimental.", {
+        u8"Otomatik BEM/SEM aktarımı deneyseldir.",
+        u8"La transferencia automática BEM/SEM es experimental.",
+        u8"A transferência automática de BEM/SEM é experimental.",
+        u8"Автоматическая передача BEM/SEM является экспериментальной.",
+        u8"Automatischer BEM/SEM-Transfer ist experimentell.",
+        u8"Le transfert automatique BEM/SEM est expérimental.",
+        u8"Il trasferimento automatico BEM/SEM è sperimentale.",
+        u8"Automatyczny transfer BEM/SEM jest eksperymentalny.",
+        u8"Automatische BEM/SEM-transfer is experimenteel.",
+    } },
+    { u8"Enable instance 6 and assign the storage account to it.", {
+        u8"6. botu etkinleştirin ve depo hesabını bu bota atayın.",
+        u8"Habilita la instancia 6 y asigna la cuenta de almacenamiento a ella.",
+        u8"Ative a instância 6 e atribua a conta de armazenamento a ela.",
+        u8"Включите экземпляр 6 и назначьте ему учетную запись хранилища.",
+        u8"Aktivieren Sie Instanz 6 und weisen Sie das Speicherkonto zu.",
+        u8"Activez l'instance 6 et attribuez-lui le compte de stockage.",
+        u8"Abilita l'istanza 6 e assegna l'account di archiviazione a essa.",
+        u8"Włącz instancję 6 i przypisz do niej konto magazynu.",
+        u8"Schakel instantie 6 in en wijs het opslagaccount eraan toe.",
+    } },
+    { u8"Do not add bot accounts as friends manually. Automatic pairing handles friend requests.", {
+        u8"Bot hesaplarını elle arkadaş olarak eklemeyin. Arkadaşlık isteklerini otomatik eşleştirme yönetir.",
+        u8"No agregues cuentas bot como amigos manualmente. El emparejamiento automático maneja las solicitudes de amistad.",
+        u8"Não adicione manualmente contas bot como amigos. O emparelhamento automático lida com solicitações de amizade.",
+        u8"Не добавляйте учетные записи bot в друзья вручную. Автоматическое связывание обрабатывает запросы на добавление в друзья.",
+        u8"Fügen Sie bot-Konten nicht manuell als Freunde hinzu. Automatisches Koppeln erledigt Freundschaftsanfragen.",
+        u8"Ne pas ajouter manuellement les comptes bot comme amis. L'appariement automatique gère les demandes d'amis.",
+        u8"Non aggiungere manualmente come amici gli account bot. L'abbinamento automatico gestisce le richieste di amicizia.",
+        u8"Nie dodawaj kont bot jako znajomych ręcznie. Automatyczne parowanie obsługuje prośby o znajomość.",
+        u8"Voeg bot accounts niet handmatig toe als vrienden. Automatische koppeling behandelt vriendschapsverzoeken.",
+    } },
+    { u8"Verify that farm names are detected correctly. If a name is read incorrectly, use a simpler farm name and remove the cached farm-name entry from nxrth_config.ini.", {
+        u8"Çiftlik adlarının doğru algılandığını kontrol edin. Bir ad yanlış okunursa daha sade bir çiftlik adı kullanın ve nxrth_config.ini içindeki önbelleğe alınmış çiftlik adı kaydını silin.",
+        u8"Verifica que los nombres de las granjas se detecten correctamente. Si un nombre se lee incorrectamente, usa un nombre de granja más simple y elimina la entrada en caché del nombre de la granja de nxrth_config.ini.",
+        u8"Verifique se os nomes das fazendas são detectados corretamente. Se um nome for lido incorretamente, use um nome de fazenda mais simples e remova a entrada armazenada em cache de nome de fazenda do nxrth_config.ini.",
+        u8"Проверьте, правильно ли определяются имена ферм. Если имя прочитано неправильно, используйте более простое имя фермы и удалите кешированную запись имени фермы из nxrth_config.ini.",
+        u8"Überprüfen Sie, ob die Farmnamen korrekt erkannt werden. Wenn ein Name falsch gelesen wird, verwenden Sie einen einfacheren Farmnamen und entfernen Sie den zwischengespeicherten Farmnamen-Eintrag aus nxrth_config.ini.",
+        u8"Vérifiez que les noms des fermes sont détectés correctement. Si un nom est lu incorrectement, utilisez un nom de ferme plus simple et supprimez l'entrée de nom de ferme mise en cache dans nxrth_config.ini.",
+        u8"Verifica che i nomi delle fattorie vengano rilevati correttamente. Se un nome viene letto in modo errato, usa un nome di fattoria più semplice e rimuovi la voce della cache del nome della fattoria da nxrth_config.ini.",
+        u8"Sprawdź, czy nazwy farm są wykrywane poprawnie. Jeśli nazwa została odczytana niepoprawnie, użyj prostszej nazwy farmy i usuń zbuforowany wpis nazwy farmy z nxrth_config.ini.",
+        u8"Controleer of farnamen correct worden gedetecteerd. Als een naam verkeerd wordt gelezen, gebruik een eenvoudigere farnnaam en verwijder de gecachte farnnaamvermelding uit nxrth_config.ini.",
+    } },
+    { u8"5. Remote & Webhook", {
+        u8"5. Uzaktan Kontrol & Webhook",
+        u8"5. Control Remoto y Webhook",
+        u8"5. Controle Remoto e Webhook",
+        u8"5. Удаленное управление и Webhook",
+        u8"5. Fernsteuerung & Webhook",
+        u8"5. Télécommande et Webhook",
+        u8"5. Telecomando e Webhook",
+        u8"5. Zdalne i Webhook",
+        u8"5. Op afstand en Webhook",
+    } },
+    { u8"Configure webhook notifications from the Remote & Webhook tab.", {
+        u8"Webhook bildirimlerini Uzaktan Kontrol ve Webhook sekmesinden yapılandırın.",
+        u8"Configura las notificaciones de webhook desde la pestaña Remoto & Webhook.",
+        u8"Configure as notificações do webhook a partir da guia Remoto e Webhook.",
+        u8"Настройте уведомления webhook на вкладке Удаленный доступ & Webhook.",
+        u8"Konfigurieren Sie webhook-Benachrichtigungen über den Reiter Remote & Webhook.",
+        u8"Configurez les notifications webhook depuis l'onglet Remote & Webhook.",
+        u8"Configura le notifiche webhook dalla scheda Remote & Webhook.",
+        u8"Skonfiguruj powiadomienia webhook w zakładce Zdalne & Webhook.",
+        u8"Configureer webhook meldingen vanuit het Remote & Webhook-tabblad.",
+    } },
+    { u8"Remote commands are no longer supported.", {
+        u8"Uzaktan komutlar artık desteklenmiyor.",
+        u8"Los comandos remotos ya no son compatibles.",
+        u8"Comandos remotos não são mais suportados.",
+        u8"Удаленные команды больше не поддерживаются.",
+        u8"Remote-Befehle werden nicht mehr unterstützt.",
+        u8"Les commandes à distance ne sont plus prises en charge.",
+        u8"I comandi remoti non sono più supportati.",
+        u8"Polecenia zdalne nie są już obsługiwane.",
+        u8"Remote-commando's worden niet langer ondersteund.",
+    } },
+    { u8"Webhook notifications can send barn status after each sale cycle.", {
+        u8"Webhook bildirimleri her satış döngüsünden sonra ambar durumunu gönderebilir.",
+        u8"Webhook las notificaciones pueden enviar el estado del granero después de cada ciclo de venta.",
+        u8"Webhook notificações podem enviar o status do celeiro após cada ciclo de venda.",
+        u8"Webhook уведомления могут отправлять статус сарая после каждого цикла продаж.",
+        u8"Webhook Benachrichtigungen können nach jedem Verkaufszyklus den Stallstatus senden.",
+        u8"Webhook les notifications peuvent envoyer l'état de la grange après chaque cycle de vente.",
+        u8"Le notifiche Webhook possono inviare lo stato del granaio dopo ogni ciclo di vendita.",
+        u8"Webhook powiadomienia mogą wysyłać status stodoły po każdym cyklu sprzedaży.",
+        u8"Webhook meldingen kunnen de status van de schuur verzenden na elke verkoopcyclus.",
+    } },
+    { u8"Enable screenshot attachments when you need to verify detected inventory values.", {
+        u8"Algılanan envanter değerlerini doğrulamak istediğinizde ekran görüntüsü eklerini etkinleştirin.",
+        u8"Habilitar adjuntos de captura de pantalla cuando necesites verificar los valores de inventario detectados.",
+        u8"Ative anexos de captura de tela quando precisar verificar os valores de inventário detectados.",
+        u8"Включите вложения скриншотов, когда нужно проверить обнаруженные значения инвентаря.",
+        u8"Aktivieren Sie Screenshot-Anhänge, wenn Sie die erkannten Lagerwerte überprüfen müssen.",
+        u8"Activez les pièces jointes de capture d'écran lorsque vous devez vérifier les valeurs d'inventaire détectées.",
+        u8"Abilita gli allegati screenshot quando hai bisogno di verificare i valori dell'inventario rilevati.",
+        u8"Włącz załączniki ze zrzutami ekranu, gdy potrzebujesz zweryfikować wykryte wartości zapasów.",
+        u8"Schakel schermafbeeldingbijlagen in wanneer u de gedetecteerde voorraadwaarden moet verifiëren.",
+    } },
+    { u8"See the world through the bot's eyes.", {
+        u8"Dünyayı botun gözünden görün.",
+        u8"Mira el mundo a través de los ojos del robot.",
+        u8"Veja o mundo através dos olhos do bot.",
+        u8"Посмотрите на мир глазами бота.",
+        u8"Sehen Sie die Welt durch die Augen des bot.",
+        u8"Voyez le monde à travers les yeux de bot.",
+        u8"Guarda il mondo attraverso gli occhi di bot.",
+        u8"Zobacz świat oczami bot.",
+        u8"Bekijk de wereld door de ogen van bot.",
+    } },
+    { u8"Target Instance", {
+        u8"Hedef Örnek",
+        u8"Instancia de destino",
+        u8"Instância de destino",
+        u8"Целевой экземпляр",
+        u8"Zielinstanz",
+        u8"Instance cible",
+        u8"Istanza di destinazione",
+        u8"Instancja docelowa",
+        u8"Doelinstantie",
+    } },
+    { u8"TAKE SNAPSHOT (Single Scan)", {
+        u8"ANLIK GÖRÜNTÜ ÇEKİN (Tek Tarama)",
+        u8"TOMAR INSTANTÁNEA (Escaneo único)",
+        u8"TIRAR INSTANTÂNEO (Varredura Única)",
+        u8"СДЕЛАТЬ СНИМОК (одно сканирование)",
+        u8"SCHNAPPSCHUSS MACHEN (Einzelscan)",
+        u8"PRENDRE UN INSTANTANÉ (Scan unique)",
+        u8"SCATTA ISTANTANEA (Scansione singola)",
+        u8"ZRÓB ZDJĘCIE (pojedynczy skan)",
+        u8"SNAPSHOT MAKEN (enkele scan)",
+    } },
+    { u8"STOP LIVE DETECTION", {
+        u8"CANLI ALGILAMAYI DURDURUN",
+        u8"DETENER DETECCIÓN EN VIVO",
+        u8"PARAR DETECÇÃO AO VIVO",
+        u8"ОСТАНОВИТЬ ОБНАРУЖЕНИЕ В РЕАЛЬНОМ РЕЖИМЕ",
+        u8"LIVE-ERKENNUNG BEENDEN",
+        u8"ARRÊTER LA DÉTECTION EN DIRECT",
+        u8"ARRESTA IL RILEVAMENTO IN TEMPO REALE",
+        u8"ZATRZYMAJ WYKRYWANIE NA ŻYWO",
+        u8"LIVE-DETECTIE STOPPEN",
+    } },
+    { u8"START LIVE DETECTION (1 FPS)", {
+        u8"CANLI ALGILAMAYI BAŞLAT (1 FPS)",
+        u8"INICIAR DETECCIÓN EN VIVO (1 FPS)",
+        u8"INICIAR DETECÇÃO AO VIVO (1 FPS)",
+        u8"НАЧАТЬ ПРЯМОЕ ОБНАРУЖЕНИЕ (1 кадр/с)",
+        u8"LIVE-ERKENNUNG STARTEN (1 FPS)",
+        u8"DÉMARRER LA DÉTECTION EN DIRECT (1 FPS)",
+        u8"INIZIA RILEVAMENTO LIVE (1 FPS)",
+        u8"ROZPOCZNIJ WYKRYWANIE NA ŻYWO (1 kl./s)",
+        u8"LIVE-DETECTIE STARTEN (1 FPS)",
+    } },
+    { u8"No vision data available. Click a button above to scan.", {
+        u8"Görüş verisi yok. Taramak için yukarıdaki düğmelerden birine tıklayın.",
+        u8"No hay datos de visión disponibles. Haga clic en un botón de arriba para escanear.",
+        u8"Nenhum dado de visão disponível. Clique em um botão acima para digitalizar.",
+        u8"Данные о зрении отсутствуют. Нажмите кнопку выше, чтобы отсканировать.",
+        u8"Keine Sehdaten verfügbar. Klicken Sie oben auf eine Schaltfläche, um zu scannen.",
+        u8"Aucune donnée de vision disponible. Cliquez sur un bouton ci-dessus pour numériser.",
+        u8"Nessun dato sulla visione disponibile. Fare clic su un pulsante qui sopra per eseguire la scansione.",
+        u8"Brak dostępnych danych dotyczących wizji. Kliknij przycisk powyżej, aby zeskanować.",
+        u8"Geen zichtgegevens beschikbaar. Klik op een knop hierboven om te scannen.",
+    } },
+    { u8"Run quick diagnostics and inspect raw ADB output.", {
+        u8"Hızlı tanılamayı çalıştırın ve ham ADB çıkışını inceleyin.",
+        u8"Ejecute diagnósticos rápidos e inspeccione la salida sin procesar ADB.",
+        u8"Execute diagnósticos rápidos e inspecione a saída ADB bruta.",
+        u8"Запустите быструю диагностику и проверьте необработанные выходные данные ADB.",
+        u8"Führen Sie eine Schnelldiagnose durch und überprüfen Sie die Rohausgabe von ADB.",
+        u8"Exécutez des diagnostics rapides et inspectez la sortie brute de ADB.",
+        u8"Esegue una diagnostica rapida e controlla l'output ADB non elaborato.",
+        u8"Uruchom szybką diagnostykę i sprawdź surowe wyjście ADB.",
+        u8"Voer een snelle diagnose uit en inspecteer de onbewerkte ADB-uitvoer.",
+    } },
+    { u8"ADB DEVICE DIAGNOSTICS", {
+        u8"ADB CİHAZ TANILAMA",
+        u8"ADB DIAGNÓSTICO DEL DISPOSITIVO",
+        u8"ADB DIAGNÓSTICO DO DISPOSITIVO",
+        u8"ADB ДИАГНОСТИКА УСТРОЙСТВА",
+        u8"ADB GERÄTEDIAGNOSE",
+        u8"ADB DIAGNOSTIC DE L'APPAREIL",
+        u8"ADB DIAGNOSTICA DEL DISPOSITIVO",
+        u8"ADB DIAGNOSTYKA URZĄDZENIA",
+        u8"ADB APPARAATDIAGNOSTIEK",
+    } },
+    { u8"Runs the configured adb.exe with: adb devices", {
+        u8"Yapılandırılmış adb.exe ile şu komutu çalıştırır: adb devices",
+        u8"Ejecuta el adb.exe configurado con el comando: adb devices",
+        u8"Executa o adb.exe configurado com o comando: adb devices",
+        u8"Запускает настроенный adb.exe с командой: adb devices",
+        u8"Führt die konfigurierte adb.exe mit folgendem Befehl aus: adb devices",
+        u8"Exécute adb.exe configuré avec la commande : adb devices",
+        u8"Esegue adb.exe configurato con il comando: adb devices",
+        u8"Uruchamia skonfigurowany adb.exe za pomocą polecenia: adb devices",
+        u8"Voert de geconfigureerde adb.exe uit met de opdracht: adb devices",
+    } },
+    { u8"Configured ADB path: %s", {
+        u8"Yapılandırılmış ADB yolu: %s",
+        u8"Ruta ADB configurada: %s",
+        u8"Caminho ADB configurado: %s",
+        u8"Настроен путь ADB: %s",
+        u8"Konfigurierter ADB Pfad: %s",
+        u8"Chemin ADB configuré : %s",
+        u8"Percorso ADB configurato: %s",
+        u8"Skonfigurowana ścieżka ADB: %s",
+        u8"Geconfigureerd ADB pad: %s",
+    } },
+    { u8"RUNNING ADB DEVICES...", {
+        u8"ADB DEVICES ÇALIŞIYOR...",
+        u8"EJECUTANDO DISPOSITIVOS ADB...",
+        u8"EXECUTANDO DISPOSITIVOS ADB...",
+        u8"ЗАПУСКАЮТСЯ ADB УСТРОЙСТВА...",
+        u8"LÄUFT ADB GERÄTE AUS ...",
+        u8"EXÉCUTION DES APPAREILS ADB...",
+        u8"DISPOSITIVI ADB IN ESECUZIONE...",
+        u8"URUCHOMIENIE ADB URZĄDZEŃ...",
+        u8"WERKEN ADB APPARATEN...",
+    } },
+    { u8"GET DEVICES LIST", {
+        u8"CİHAZ LİSTESİNİ AL",
+        u8"OBTENER LISTA DE DISPOSITIVOS",
+        u8"OBTER LISTA DE DISPOSITIVOS",
+        u8"ПОЛУЧИТЬ СПИСОК УСТРОЙСТВ",
+        u8"GERÄTELISTE ERHALTEN",
+        u8"OBTENIR LA LISTE DES APPAREILS",
+        u8"OTTIENI L'ELENCO DEI DISPOSITIVI",
+        u8"POBIERZ LISTĘ URZĄDZEŃ",
+        u8"APPARAATLIJST OPHALEN",
+    } },
+    { u8"Running...", {
+        u8"Çalışıyor...",
+        u8"Ejecutando...",
+        u8"Executando...",
+        u8"Выполняется...",
+        u8"Läuft...",
+        u8"En cours d'exécution...",
+        u8"In esecuzione...",
+        u8"Uruchamianie...",
+        u8"Actief...",
+    } },
+    { u8"COPY OUTPUT", {
+        u8"ÇIKTIYI KOPYALA",
+        u8"COPIAR SALIDA",
+        u8"SAÍDA DE CÓPIA",
+        u8"КОПИРОВАТЬ ВЫВОД",
+        u8"KOPIERAUSGABE",
+        u8"COPIE SORTIE",
+        u8"COPIA USCITA",
+        u8"KOPIUJ WYJŚCIE",
+        u8"KOPIE-UITVOER",
+    } },
+    { u8"CLEAR OUTPUT", {
+        u8"ÇIKTIYI TEMİZLE",
+        u8"BORRAR SALIDA",
+        u8"LIMPAR SAÍDA",
+        u8"ОЧИСТИТЬ ВЫВОД",
+        u8"AUSGANG LÖSCHEN",
+        u8"EFFACER LA SORTIE",
+        u8"CANCELLA USCITA",
+        u8"WYCZYŚĆ WYJŚCIE",
+        u8"UITVOER WISSEN",
+    } },
+    { u8"No command has been run yet.", {
+        u8"Henüz hiçbir komut çalıştırılmadı.",
+        u8"Aún no se ha ejecutado ningún comando.",
+        u8"Nenhum comando foi executado ainda.",
+        u8"Ни одна команда еще не выполнялась.",
+        u8"Es wurde noch kein Befehl ausgeführt.",
+        u8"Aucune commande n'a encore été exécutée.",
+        u8"Nessun comando è stato ancora eseguito.",
+        u8"Żadne polecenie nie zostało jeszcze wykonane.",
+        u8"Er is nog geen opdracht uitgevoerd.",
+    } },
+    { u8"STOPPED", {
+        u8"DURDURULDU",
+        u8"DETENIDO",
+        u8"PARADO",
+        u8"ОСТАНОВЛЕНО",
+        u8"GESTOPPT",
+        u8"ARRÊTÉ",
+        u8"ARRESTATO",
+        u8"ZATRZYMANY",
+        u8"GESTOPT",
+    } },
+    { u8"STARTING...", {
+        u8"BAŞLIYOR...",
+        u8"INICIANDO...",
+        u8"INICIANDO...",
+        u8"НАЧИНАЕМ...",
+        u8"BEGINNT...",
+        u8"DÉMARRAGE...",
+        u8"INIZIO...",
+        u8"URUCHOMIENIE...",
+        u8"BEGINNEN...",
+    } },
+    { u8"Starting Emulator Environment...", {
+        u8"Emülatör Ortamı Başlatılıyor...",
+        u8"Iniciando Entorno del Emulador...",
+        u8"Iniciando Ambiente do Emulador...",
+        u8"Запуск среды эмулятора...",
+        u8"Starte Emulator-Umgebung...",
+        u8"Démarrage de l'environnement d'émulateur...",
+        u8"Avvio dell'ambiente dell'emulatore...",
+        u8"Uruchamianie środowiska emulatora...",
+        u8"Emulatoromgeving starten...",
+    } },
+    { u8"Waiting for Android to boot (Takes 15-30s)...", {
+        u8"Android'in başlatılması bekleniyor (15-30 saniye sürer)...",
+        u8"Esperando que Android arranque (tarda entre 15 y 30 segundos)...",
+        u8"Aguardando a inicialização do Android (leva de 15 a 30 segundos)...",
+        u8"Ожидание загрузки Android (занимает 15–30 секунд)...",
+        u8"Warten auf den Start von Android (Dauert 15–30 Sekunden) …",
+        u8"En attente du démarrage d'Android (prend 15 à 30 s)...",
+        u8"In attesa dell'avvio di Android (richiede 15-30 secondi)...",
+        u8"Oczekiwanie na uruchomienie Androida (trwa 15–30 s)…",
+        u8"Wachten tot Android opstart (duurt 15-30 seconden)...",
+    } },
+    { u8"ERROR: Android boot timeout! ADB offline.", {
+        u8"HATA: Android önyükleme zaman aşımı! ADB çevrimdışı.",
+        u8"ERROR: ¡Tiempo de espera de arranque de Android! ADB fuera de línea.",
+        u8"ERRO: tempo limite de inicialização do Android! ADB off-line.",
+        u8"ОШИБКА: тайм-аут загрузки Android! ADB не в сети.",
+        u8"FEHLER: Android-Startzeitüberschreitung! ADB offline.",
+        u8"ERREUR : expiration du délai de démarrage Android ! ADB hors ligne.",
+        u8"ERRORE: timeout di avvio Android! ADB non in linea.",
+        u8"BŁĄD: Przekroczono limit czasu uruchamiania Androida! ADB offline.",
+        u8"FOUT: Time-out voor opstarten van Android! ADB offline.",
+    } },
+    { u8"Android is ready. Launching Hay Day...", {
+        u8"Android hazır. Hay Day başlatılıyor...",
+        u8"Android está listo. Lanzando Hay Day...",
+        u8"O Android está pronto. Iniciando Hay Day...",
+        u8"Android готов. Запуск Hay Day...",
+        u8"Android ist bereit. Hay Day wird gestartet...",
+        u8"Android est prêt. Lancement de Hay Day...",
+        u8"Android è pronto. Avvio di Hay Day...",
+        u8"Android jest gotowy. Uruchamiam Hay Day...",
+        u8"Android is klaar. Hay Day starten...",
+    } },
+    { u8"App Launched successfully.", {
+        u8"Uygulama başarıyla başlatıldı.",
+        u8"Aplicación lanzada exitosamente.",
+        u8"Aplicativo lançado com sucesso.",
+        u8"Приложение успешно запущено.",
+        u8"App erfolgreich gestartet.",
+        u8"Application lancée avec succès.",
+        u8"App avviata correttamente.",
+        u8"Aplikacja została pomyślnie uruchomiona.",
+        u8"App succesvol gelanceerd.",
+    } },
+    { u8"Starting bot...", {
+        u8"Bot başlatılıyor...",
+        u8"Iniciando bot...",
+        u8"Iniciando bot...",
+        u8"Запускаем бот...",
+        u8"Startet bot...",
+        u8"Démarrage de bot...",
+        u8"Avvio di bot...",
+        u8"Uruchamianie bot...",
+        u8"bot starten...",
+    } },
+    { u8"Settings saved to nxrth_config.ini", {
+        u8"Ayarlar nxrth_config.ini dosyasına kaydedildi",
+        u8"Configuraciones guardadas en nxrth_config.ini",
+        u8"Configurações salvas em nxrth_config.ini",
+        u8"Настройки сохранены в nxrth_config.ini",
+        u8"Einstellungen gespeichert in nxrth_config.ini",
+        u8"Paramètres enregistrés dans nxrth_config.ini",
+        u8"Impostazioni salvate in nxrth_config.ini",
+        u8"Ustawienia zapisane w nxrth_config.ini",
+        u8"Instellingen opgeslagen in nxrth_config.ini",
+    } },
+    { u8"Seed Check", {
+        u8"Tohum Kontrolü",
+        u8"Verificación de semillas",
+        u8"Verificação de sementes",
+        u8"Проверка исходного значения",
+        u8"Seed-Check",
+        u8"Vérification des semences",
+        u8"Controllo seme",
+        u8"Kontrola nasion",
+        u8"Zaadcontrole",
+    } },
+    { u8"Sickle Check", {
+        u8"Orak Kontrolü",
+        u8"Cheque de hoz",
+        u8"Verificação de Foice",
+        u8"Проверка серпа",
+        u8"Sichelcheck",
+        u8"Contrôle faucille",
+        u8"Controllo della falce",
+        u8"Kontrola sierpowa",
+        u8"Sikkelcontrole",
+    } },
+    { u8"Starting ADB server for LDPlayer...", {
+        u8"LDPlayer için ADB sunucusu başlatılıyor...",
+        u8"Iniciando el servidor ADB para LDPlayer...",
+        u8"Iniciando servidor ADB para LDPlayer...",
+        u8"Запуск сервера ADB для LDPlayer...",
+        u8"ADB-Server für LDPlayer wird gestartet...",
+        u8"Démarrage du serveur ADB pour LDPlayer...",
+        u8"Avvio del server ADB per LDPlayer...",
+        u8"Uruchamianie serwera ADB dla LDPlayer...",
+        u8"ADB-server starten voor LDPlayer...",
+    } },
+    { u8"Bot start failed: Could not start the ADB server.", {
+        u8"Bot başlatma başarısız oldu: ADB sunucusu başlatılamadı.",
+        u8"Error al iniciar el bot: No se pudo iniciar el servidor ADB.",
+        u8"Falha na inicialização do bot: não foi possível iniciar o servidor ADB.",
+        u8"Ошибка запуска бота: не удалось запустить сервер ADB.",
+        u8"Bot-Start fehlgeschlagen: Der ADB-Server konnte nicht gestartet werden.",
+        u8"Bot démarrage échoué : Impossible de démarrer le serveur ADB.",
+        u8"Avvio di Bot fallito: Impossibile avviare il server ADB.",
+        u8"Bot nie powiodło się: Nie można uruchomić serwera ADB.",
+        u8"Bot start mislukt: Kan de ADB-server niet starten.",
+    } },
+    { u8"ADB output: ", {
+        u8"ADB çıkışı: ",
+        u8"ADB salida: ",
+        u8"ADB saída: ",
+        u8"ADB вывод: ",
+        u8"ADB Ausgabe: ",
+        u8"sortie de ADB : ",
+        u8"Output di ADB: ",
+        u8"ADB wyjście: ",
+        u8"ADB uitvoer: ",
+    } },
+    { u8"ADB connection: ", {
+        u8"ADB bağlantısı: ",
+        u8"ADB conexión: ",
+        u8"ADB: ",
+        u8"ADB: ",
+        u8"ADB Verbindung: ",
+        u8"ADB : ",
+        u8"ADB: ",
+        u8"ADB połączenie: ",
+        u8"ADB-verbinding: ",
+    } },
+    { u8"LDPlayer ADB is online. Starting bot...", {
+        u8"LDPlayer ADB çevrimiçi. Bot başlatılıyor...",
+        u8"LDPlayer ADB está en línea. Iniciando bot...",
+        u8"LDPlayer ADB está on-line. Iniciando bot...",
+        u8"LDPlayer ADB онлайн. Запускаю бота...",
+        u8"LDPlayer ADB ist online. bot wird gestartet...",
+        u8"LDPlayer ADB est en ligne. Démarrage de bot...",
+        u8"LDPlayer ADB è online. Avvio di bot...",
+        u8"LDPlayer ADB jest online. Rozpoczynanie bot...",
+        u8"LDPlayer ADB is online. bot starten...",
+    } },
+    { u8"Bot start failed: LDPlayer ADB device is offline.", {
+        u8"Bot başlatma başarısız oldu: LDPlayer ADB cihazı çevrimdışı.",
+        u8"Error al iniciar el bot: el dispositivo LDPlayer ADB está fuera de línea.",
+        u8"Falha na inicialização do bot: LDPlayer ADB dispositivo está offline.",
+        u8"Не удалось запустить бота: устройство LDPlayer ADB находится в автономном режиме.",
+        u8"Bot Start fehlgeschlagen: LDPlayer ADB Gerät ist offline.",
+        u8"Bot démarrage échoué : l'appareil LDPlayer ADB est hors ligne.",
+        u8"Avvio di Bot fallito: Il dispositivo LDPlayer ADB è offline.",
+        u8"Bot uruchomienie nie powiodło się: LDPlayer ADB urządzenie jest w trybie offline.",
+        u8"Bot start mislukt: LDPlayer ADB apparaat is offline.",
+    } },
+    { u8"Bot start failed: LDPlayer ADB device is unauthorized.", {
+        u8"Bot başlatma başarısız oldu: LDPlayer ADB cihazı yetkisiz.",
+        u8"Error al iniciar el bot: LDPlayer ADB el dispositivo no está autorizado.",
+        u8"Falha na inicialização do bot: LDPlayer ADB dispositivo não autorizado.",
+        u8"Не удалось запустить бота: устройство LDPlayer ADB не авторизовано.",
+        u8"Bot Start fehlgeschlagen: LDPlayer ADB Gerät ist nicht autorisiert.",
+        u8"Bot démarrage échoué : l'appareil LDPlayer ADB n'est pas autorisé.",
+        u8"Avvio di Bot fallito: Il dispositivo LDPlayer ADB non è autorizzato.",
+        u8"Bot uruchomienie nie powiodło się: LDPlayer ADB urządzenie jest nieautoryzowane.",
+        u8"Bot start mislukt: LDPlayer ADB apparaat is niet geautoriseerd.",
+    } },
+    { u8"Bot start failed: LDPlayer ADB device was not found.", {
+        u8"Bot başlatma başarısız oldu: LDPlayer ADB cihazı bulunamadı.",
+        u8"Error al iniciar el bot: LDPlayer ADB no se encontró el dispositivo.",
+        u8"Falha na inicialização do bot: LDPlayer ADB dispositivo não encontrado.",
+        u8"Не удалось запустить бота: устройство LDPlayer ADB не найдено.",
+        u8"Bot Start fehlgeschlagen: LDPlayer ADB Gerät wurde nicht gefunden.",
+        u8"Bot a échoué : le périphérique LDPlayer ADB est introuvable.",
+        u8"Bot non riuscito: dispositivo LDPlayer ADB non trovato.",
+        u8"Bot uruchomienie nie powiodło się: LDPlayer ADB urządzenie nie zostało znalezione.",
+        u8"Bot start mislukt: LDPlayer ADB apparaat is niet gevonden.",
+    } },
+    { u8"Injection failed: ADB device is offline. Files were not pushed.", {
+        u8"Enjeksiyon başarısız oldu: ADB cihazı çevrimdışı. Dosyalar aktarılmadı.",
+        u8"Error de inyección: el dispositivo ADB está fuera de línea. Los archivos no fueron enviados.",
+        u8"Falha na injeção: o dispositivo ADB está offline. Os arquivos não foram enviados.",
+        u8"Не удалось выполнить внедрение: устройство ADB находится в автономном режиме. Файлы не были отправлены.",
+        u8"Injektion fehlgeschlagen: ADB Gerät ist offline. Dateien wurden nicht gepusht.",
+        u8"Échec de l'injection : le périphérique ADB est hors ligne. Les fichiers n'ont pas été poussés.",
+        u8"Iniezione non riuscita: il dispositivo ADB è offline. I file non sono stati inviati.",
+        u8"Wstrzyknięcie nie powiodło się: ADB urządzenie jest offline. Pliki nie zostały przesłane.",
+        u8"Injectie mislukt: ADB apparaat is offline. Bestanden zijn niet gepusht.",
+    } },
+    { u8"Injection failed: ADB device is unauthorized. Files were not pushed.", {
+        u8"Enjeksiyon başarısız oldu: ADB cihazı yetkisiz. Dosyalar aktarılmadı.",
+        u8"Error de inyección: el dispositivo ADB no está autorizado. Los archivos no fueron enviados.",
+        u8"Falha na injeção: dispositivo ADB não autorizado. Os arquivos não foram enviados.",
+        u8"Не удалось выполнить внедрение: устройство ADB не авторизовано. Файлы не были отправлены.",
+        u8"Injektion fehlgeschlagen: ADB Gerät ist nicht autorisiert. Dateien wurden nicht gepusht.",
+        u8"Échec de l'injection : le périphérique ADB n'est pas autorisé. Les fichiers n'ont pas été poussés.",
+        u8"Iniezione non riuscita: il dispositivo ADB non è autorizzato. I file non sono stati inviati.",
+        u8"Wstrzyknięcie nie powiodło się: urządzenie ADB jest nieautoryzowane. Pliki nie zostały przesłane.",
+        u8"Injectie mislukt: ADB apparaat is niet geautoriseerd. Bestanden zijn niet gepusht.",
+    } },
+    { u8"Injection failed: ADB device is not connected. Files were not pushed.", {
+        u8"Enjeksiyon başarısız oldu: ADB cihazı bağlı değil. Dosyalar aktarılmadı.",
+        u8"Error de inyección: el dispositivo ADB no está conectado. Los archivos no fueron enviados.",
+        u8"Falha na injeção: dispositivo ADB não está conectado. Os arquivos não foram enviados.",
+        u8"Не удалось выполнить инъекцию: устройство ADB не подключено. Файлы не были отправлены.",
+        u8"Injektion fehlgeschlagen: ADB Gerät ist nicht verbunden. Dateien wurden nicht gepusht.",
+        u8"Échec de l'injection : le périphérique ADB n'est pas connecté. Les fichiers n'ont pas été poussés.",
+        u8"Iniezione non riuscita: il dispositivo ADB non è collegato. I file non sono stati inviati.",
+        u8"Wstrzyknięcie nie powiodło się: urządzenie ADB nie jest podłączone. Pliki nie zostały przesłane.",
+        u8"Injectie mislukt: ADB-apparaat is niet aangesloten. Bestanden zijn niet gepusht.",
+    } },
+    { u8"Injection failed. Check the ADB output for details.", {
+        u8"Enjeksiyon başarısız oldu. Ayrıntılar için ADB çıkışını kontrol edin.",
+        u8"Falló la inyección. Consulte la salida ADB para obtener más detalles.",
+        u8"Falha na injeção. Verifique a saída ADB para obter detalhes.",
+        u8"Не удалось выполнить внедрение. Подробности проверьте вывод ADB.",
+        u8"Injektion fehlgeschlagen. Weitere Informationen finden Sie in der Ausgabe von ADB.",
+        u8"L'injection a échoué. Vérifiez la sortie ADB pour plus de détails.",
+        u8"Iniezione non riuscita. Controllare l'uscita ADB per i dettagli.",
+        u8"Wstrzyknięcie nie powiodło się. Aby uzyskać szczegółowe informacje, sprawdź wyjście ADB.",
+        u8"Injectie mislukt. Controleer de ADB-uitvoer voor details.",
+    } },
+    { u8"Running ", {
+        u8"Çalışıyor ",
+        u8"Corriendo ",
+        u8"Em execução ",
+        u8"Работает ",
+        u8"Läuft ",
+        u8"En cours d'exécution ",
+        u8"In esecuzione ",
+        u8"Działa ",
+        u8"Actief ",
+    } },
+    { u8" FOUND! Score: ", {
+        u8" BULUNDU! Puan: ",
+        u8" ¡ENCONTRADO! Puntuación: ",
+        u8" ENCONTRADO! Pontuação: ",
+        u8" НАЙДЕН! Оценка: ",
+        u8" GEFUNDEN! Ergebnis: ",
+        u8" TROUVÉ ! Note : ",
+        u8" TROVATO! Punteggio: ",
+        u8" ZNALEZIONO! Wynik: ",
+        u8" GEVONDEN! Score: ",
+    } },
+    { u8" NOT Found.", {
+        u8" Bulunamadı.",
+        u8" NO encontrado.",
+        u8" NÃO encontrado.",
+        u8" НЕ найден.",
+        u8" NICHT gefunden.",
+        u8" NON trouvé.",
+        u8" NON trovato.",
+        u8" NIE Znaleziono.",
+        u8" NIET gevonden.",
+    } },
+    { u8"Emulator is not responding. Waiting 15 seconds...", {
+        u8"Emülatör yanıt vermiyor. 15 saniye bekliyorum...",
+        u8"El emulador no responde. Esperando 15 segundos...",
+        u8"O emulador não está respondendo. Esperando 15 segundos...",
+        u8"Эмулятор не отвечает. Ожидание 15 секунд...",
+        u8"Der Emulator reagiert nicht. 15 Sekunden warten...",
+        u8"L'émulateur ne répond pas. J'attends 15 secondes...",
+        u8"L'emulatore non risponde. Aspettando 15 secondi...",
+        u8"Emulator nie odpowiada. Czekam 15 sekund...",
+        u8"Emulator reageert niet. 15 seconden wachten...",
+    } },
+    { u8"Emulator is still unresponsive. Restarting...", {
+        u8"Emülatör hâlâ yanıt vermiyor. Yeniden başlatılıyor...",
+        u8"El emulador aún no responde. Reiniciando...",
+        u8"O emulador ainda não responde. Reiniciando...",
+        u8"Эмулятор по-прежнему не отвечает. Перезапуск...",
+        u8"Der Emulator reagiert immer noch nicht. Neustart...",
+        u8"L'émulateur ne répond toujours pas. Redémarrage...",
+        u8"L'emulatore continua a non rispondere. Riavvio...",
+        u8"Emulator nadal nie odpowiada. Ponowne uruchamianie...",
+        u8"De emulator reageert nog steeds niet. Opnieuw opstarten...",
+    } },
+    { u8"Emulator is responding again.", {
+        u8"Emülatör yeniden yanıt veriyor.",
+        u8"El emulador está respondiendo nuevamente.",
+        u8"O emulador está respondendo novamente.",
+        u8"Эмулятор снова отвечает.",
+        u8"Emulator antwortet wieder.",
+        u8"L'émulateur répond à nouveau.",
+        u8"L'emulatore sta rispondendo di nuovo.",
+        u8"Emulator ponownie odpowiada.",
+        u8"De emulator reageert weer.",
+    } },
+    { u8"Hay Day process is unavailable. Relaunching...", {
+        u8"Hay Day işlemi kullanılamıyor. Yeniden başlatılıyor...",
+        u8"Hay Day no está disponible. Relanzamiento...",
+        u8"Hay Day processo não está disponível. Reiniciando...",
+        u8"Процесс Hay Day недоступен. Перезапуск...",
+        u8"Hay Day ist nicht verfügbar. Neustart...",
+        u8"Hay Day n'est pas disponible. Relance...",
+        u8"Hay Day non è disponibile. Rilancio...",
+        u8"Hay Day jest niedostępny. Ponowne uruchamianie...",
+        u8"Hay Day-proces is niet beschikbaar. Opnieuw lanceren...",
+    } },
+    { u8"Game process check failed: ", {
+        u8"Oyun süreci kontrolü başarısız oldu: ",
+        u8"Falló la verificación del proceso del juego: ",
+        u8"Falha na verificação do processo do jogo: ",
+        u8"Не удалось проверить игровой процесс: ",
+        u8"Überprüfung des Spielprozesses fehlgeschlagen: ",
+        u8"Échec de la vérification du processus de jeu : ",
+        u8"Controllo del processo di gioco non riuscito: ",
+        u8"Sprawdzanie procesu gry nie powiodło się: ",
+        u8"Controle van spelproces mislukt: ",
+    } },
+    { u8"Checking revive template...", {
+        u8"Yeniden canlandırma şablonu kontrol ediliyor...",
+        u8"Comprobando plantilla de reactivación...",
+        u8"Verificando modelo de reviver...",
+        u8"Проверка шаблона восстановления...",
+        u8"Wiederbelebungsvorlage wird überprüft...",
+        u8"Vérification du modèle de réanimation...",
+        u8"Controllo del modello di ripristino in corso...",
+        u8"Sprawdzam szablon ożywienia...",
+        u8"Revive-sjabloon controleren...",
+    } },
+    { u8"Revive template found.", {
+        u8"Yeniden canlandırma şablonu bulundu.",
+        u8"Plantilla de reactivación encontrada.",
+        u8"Modelo de reavivamento encontrado.",
+        u8"Найден шаблон восстановления.",
+        u8"Revive-Vorlage gefunden.",
+        u8"Modèle de réanimation trouvé.",
+        u8"Modello di ripristino trovato.",
+        u8"Znaleziono szablon ożywienia.",
+        u8"Revive-sjabloon gevonden.",
+    } },
+    { u8"Revive template not found: ", {
+        u8"Yeniden canlandırma şablonu bulunamadı: ",
+        u8"Plantilla de reactivación no encontrada: ",
+        u8"Modelo de revitalização não encontrado: ",
+        u8"Шаблон восстановления не найден: ",
+        u8"Revive-Vorlage nicht gefunden: ",
+        u8"Modèle de réanimation introuvable : ",
+        u8"Modello di ripristino non trovato: ",
+        u8"Nie znaleziono szablonu Revive: ",
+        u8"Revive-sjabloon niet gevonden: ",
+    } },
+    { u8"Revive check failed three times. Restarting the game...", {
+        u8"Yeniden canlandırma kontrolü üç kez başarısız oldu. Oyun yeniden başlatılıyor...",
+        u8"La verificación de reactivación falló tres veces. Reiniciando el juego...",
+        u8"A verificação de reavivamento falhou três vezes. Reiniciando o jogo...",
+        u8"Проверка восстановления не удалась три раза. Перезапуск игры...",
+        u8"Die Wiederbelebungsprüfung ist dreimal fehlgeschlagen. Das Spiel wird neu gestartet...",
+        u8"La vérification de réanimation a échoué trois fois. Redémarrage du jeu...",
+        u8"Il controllo di riattivazione non è riuscito tre volte. Riavvio del gioco...",
+        u8"Kontrola ożywienia nie powiodła się trzy razy. Ponowne uruchamianie gry...",
+        u8"Revive-controle is drie keer mislukt. Het spel opnieuw starten...",
+    } },
+    { u8"Missing injection file: ", {
+        u8"Eksik yükleme dosyası: ",
+        u8"Falta el archivo de inyección: ",
+        u8"Arquivo de injeção ausente: ",
+        u8"Отсутствует файл внедрения: ",
+        u8"Fehlende Injektionsdatei: ",
+        u8"Fichier d'injection manquant : ",
+        u8"File di iniezione mancante: ",
+        u8"Brakujący plik wtrysku: ",
+        u8"Ontbrekend injectiebestand: ",
+    } },
+    { u8"Error: Basic hack files (zoom/font/minitouch) missing!", {
+        u8"Hata: Gerekli zoom, yazı tipi veya Minitouch dosyaları eksik!",
+        u8"Error: ¡Faltan archivos de pirateo básicos (zoom/font/minitouch)!",
+        u8"Erro: arquivos de hack básicos (zoom/font/minitouch) ausentes!",
+        u8"Ошибка: основные файлы взлома (zoom/font/minitouch) отсутствуют!",
+        u8"Fehler: Grundlegende Hack-Dateien (zoom/font/minitouch) fehlen!",
+        u8"Erreur : fichiers de hack de base (zoom/font/minitouch) manquants !",
+        u8"Errore: file di hacking di base (zoom/font/minitouch) mancanti!",
+        u8"Błąd: Brakuje podstawowych plików hackowych (zoom/font/minitouch)!",
+        u8"Fout: basishackbestanden (zoom/font/minitouch) ontbreken!",
+    } },
+    { u8"Starting verified file injection. This may take 10-15 seconds...", {
+        u8"Doğrulamalı dosya yükleme başlatılıyor. Bu işlem 10-15 saniye sürebilir...",
+        u8"Iniciando la inyección de archivo verificado. Esto puede tardar 10-15 segundos...",
+        u8"Iniciando injeção de arquivo verificado. Isso pode levar 10-15 segundos...",
+        u8"Запуск проверенной инъекции файла. Это может занять 10-15 секунд...",
+        u8"Einschleusung verifizierter Dateien wird gestartet. Dies kann 10-15 Sekunden dauern...",
+        u8"Démarrage de l'injection de fichiers vérifiés. Cela peut prendre 10-15 secondes...",
+        u8"Avvio dell'iniezione di file verificati. Questo può richiedere 10-15 secondi...",
+        u8"Rozpoczęcie wstrzykiwania zweryfikowanego pliku. Może to zająć 10-15 sekund...",
+        u8"Geverifieerde bestandsinjectie starten. Dit kan 10-15 seconden duren...",
+    } },
+    { u8"ADB device is online. Starting injection...", {
+        u8"ADB cihazı çevrimiçi. Enjeksiyon başlatılıyor...",
+        u8"ADB está en línea. Iniciando inyección...",
+        u8"ADB está on-line. Iniciando a injeção...",
+        u8"Устройство ADB находится в сети. Начинаем инъекцию...",
+        u8"ADB Gerät ist online. Injektion wird gestartet...",
+        u8"ADB est en ligne. Début des injections...",
+        u8"ADB è online. Avvio dell'iniezione...",
+        u8"ADB urządzenie jest online. Rozpoczęcie wstrzykiwania...",
+        u8"ADB-apparaat is online. Injectie starten...",
+    } },
+    { u8"Stopping Hay Day...", {
+        u8"Hay Day durduruluyor...",
+        u8"Deteniendo Hay Day...",
+        u8"Parando Hay Day...",
+        u8"Остановка Hay Day...",
+        u8"Hay Day wird gestoppt...",
+        u8"Arrêt de Hay Day...",
+        u8"Arresto di Hay Day...",
+        u8"Zatrzymywanie Hay Day...",
+        u8"Hay Day stoppen...",
+    } },
+    { u8"1/4: Pushing font and language files...", {
+        u8"1/4: Yazı tipi ve dil dosyaları aktarılıyor...",
+        u8"1/4: Subiendo archivos de fuente e idioma...",
+        u8"1/4: Enviando arquivos de fonte e idioma...",
+        u8"1/4: Передача файлов шрифтов и языков...",
+        u8"1/4: Schriftart- und Sprachdateien werden übertragen ...",
+        u8"1/4 : Pousser les fichiers de polices et de langue...",
+        u8"1/4: Invio dei file di caratteri e lingua...",
+        u8"1/4: Przesyłanie plików czcionek i języków...",
+        u8"1/4: Lettertype- en taalbestanden pushen...",
+    } },
+    { u8"2/4: Pushing view-distance files...", {
+        u8"2/4: Görüş mesafesi dosyaları aktarılıyor...",
+        u8"2/4: Envío de archivos de distancia de visualización...",
+        u8"2/4: Enviando arquivos de distância de visualização...",
+        u8"2/4: Передача файлов с дистанцией просмотра...",
+        u8"2/4: Ansichtsentfernungsdateien werden verschoben ...",
+        u8"2/4 : Pousser les fichiers de distance de vue...",
+        u8"4/2: Invio dei file con distanza di visualizzazione...",
+        u8"2/4: Przesyłanie plików dotyczących odległości widoku...",
+        u8"2/4: Bestanden op weergaveafstand verschuiven...",
+    } },
+    { u8"3/4: Preparing and pushing visual assets...", {
+        u8"3/4: Görsel öğelerin hazırlanması ve aktarılması...",
+        u8"3/4: Preparando y promocionando recursos visuales...",
+        u8"3/4: Preparando e enviando recursos visuais...",
+        u8"3/4: Подготовка и размещение визуальных ресурсов...",
+        u8"3/4: Visuelle Assets vorbereiten und verbreiten ...",
+        u8"3/4 : Préparer et diffuser les éléments visuels...",
+        u8"4/3: Preparazione e pubblicazione delle risorse visive...",
+        u8"3/4: Przygotowanie i przesyłanie zasobów wizualnych...",
+        u8"3/4: Visuele middelen voorbereiden en promoten...",
+    } },
+    { u8"Injection failed: Could not decrypt ", {
+        u8"Enjeksiyon başarısız oldu: Şifre çözülemedi ",
+        u8"Error de inyección: No se pudo descifrar ",
+        u8"Falha na injeção: não foi possível descriptografar ",
+        u8"Не удалось внедрить: не удалось расшифровать ",
+        u8"Injektion fehlgeschlagen: Konnte nicht entschlüsselt werden ",
+        u8"Échec de l'injection : impossible de déchiffrer ",
+        u8"Iniezione non riuscita: impossibile decrittografare ",
+        u8"Wstrzyknięcie nie powiodło się: Nie można odszyfrować ",
+        u8"Injectie mislukt: kon niet ontsleutelen ",
+    } },
+    { u8"Injection failed: Could not create a temporary file for ", {
+        u8"Enjeksiyon başarısız oldu: Geçici dosya oluşturulamadı ",
+        u8"Error de inyección: No se pudo crear un archivo temporal para ",
+        u8"Falha na injeção: não foi possível criar um arquivo temporário para ",
+        u8"Не удалось внедрить: не удалось создать временный файл для ",
+        u8"Injektion fehlgeschlagen: Es konnte keine temporäre Datei für erstellt werden ",
+        u8"Échec de l'injection : impossible de créer un fichier temporaire pour ",
+        u8"Iniezione non riuscita: impossibile creare un file temporaneo per ",
+        u8"Wstrzyknięcie nie powiodło się: Nie można utworzyć pliku tymczasowego dla ",
+        u8"Injectie mislukt: kan geen tijdelijk bestand maken voor ",
+    } },
+    { u8"Applying visual assets...", {
+        u8"Görsel öğeler uygulanıyor...",
+        u8"Aplicando recursos visuales...",
+        u8"Aplicando recursos visuais...",
+        u8"Применение визуальных ресурсов...",
+        u8"Visuelle Assets werden angewendet...",
+        u8"Application d'éléments visuels...",
+        u8"Applicazione delle risorse visive...",
+        u8"Stosowanie zasobów wizualnych...",
+        u8"Visuele middelen toepassen...",
+    } },
+    { u8"4/4: Pushing Minitouch...", {
+        u8"4/4: Minitouch aktarılıyor...",
+        u8"4/4: Transfiriendo Minitouch...",
+        u8"4/4: Transferindo Minitouch...",
+        u8"4/4: Передача Minitouch...",
+        u8"4/4: Minitouch wird übertragen...",
+        u8"4/4 : Transfert de Minitouch...",
+        u8"4/4: Trasferimento di Minitouch...",
+        u8"4/4: Przesyłanie Minitouch...",
+        u8"4/4: Minitouch overzetten...",
+    } },
+    { u8"All injected files were verified on the emulator.", {
+        u8"Enjekte edilen tüm dosyalar emülatörde doğrulandı.",
+        u8"Todos los archivos inyectados fueron verificados en el emulador.",
+        u8"Todos os arquivos injetados foram verificados no emulador.",
+        u8"Все внедренные файлы были проверены на эмуляторе.",
+        u8"Alle injizierten Dateien wurden auf dem Emulator überprüft.",
+        u8"Tous les fichiers injectés ont été vérifiés sur l'émulateur.",
+        u8"Tutti i file inseriti sono stati verificati sull'emulatore.",
+        u8"Wszystkie wstrzyknięte pliki zostały zweryfikowane na emulatorze.",
+        u8"Alle geïnjecteerde bestanden zijn geverifieerd op de emulator.",
+    } },
+    { u8"Injection completed. All files were pushed and verified.", {
+        u8"Enjeksiyon tamamlandı. Tüm dosyalar aktarıldı ve doğrulandı.",
+        u8"Inyección completada. Todos los archivos fueron enviados y verificados.",
+        u8"Injeção concluída. Todos os arquivos foram enviados e verificados.",
+        u8"Внедрение завершено. Все файлы были отправлены и проверены.",
+        u8"Injektion abgeschlossen. Alle Dateien wurden gepusht und überprüft.",
+        u8"Injection terminée. Tous les fichiers ont été poussés et vérifiés.",
+        u8"Iniezione completata. Tutti i file sono stati inviati e verificati.",
+        u8"Wstrzyknięcie zakończone. Wszystkie pliki zostały przesłane i zweryfikowane.",
+        u8"Injectie voltooid. Alle bestanden zijn gepusht en geverifieerd.",
+    } },
+    { u8"Saving & Encrypting Account Data...", {
+        u8"Hesap Verileri Kaydediliyor & Şifreleniyor...",
+        u8"Guardando y Encriptando Datos de Cuenta...",
+        u8"Salvando e Criptografando Dados da Conta...",
+        u8"Сохранение и шифрование данных аккаунта...",
+        u8"Speichere & verschlüssele Kontodaten...",
+        u8"Enregistrement et cryptage des données de compte...",
+        u8"Salvataggio e crittografia dei dati dell'account...",
+        u8"Zapisywanie i szyfrowanie danych konta...",
+        u8"Accountgegevens opslaan en coderen...",
+    } },
+    { u8"Account Saved & Encrypted Successfully.", {
+        u8"Hesap Başarıyla Kaydedildi ve Şifrelendi.",
+        u8"Cuenta Guardada y Encriptada con Éxito.",
+        u8"Conta Salva e Criptografada com Sucesso.",
+        u8"Аккаунт успешно сохранен и зашифрован.",
+        u8"Konto erfolgreich gespeichert & verschlüsselt.",
+        u8"Compte enregistré et crypté avec succès.",
+        u8"Account salvato e crittografato correttamente.",
+        u8"Konto zostało pomyślnie zapisane i zaszyfrowane.",
+        u8"Account succesvol opgeslagen en gecodeerd.",
+    } },
+    { u8"Save Failed. Check Settings.", {
+        u8"Kaydetme Başarısız. Ayarları Kontrol Edin.",
+        u8"Error al Guardar. Verifique las Configuraciones.",
+        u8"Falha ao Salvar. Verifique as Configurações.",
+        u8"Сбой сохранения. Проверьте настройки.",
+        u8"Speichern fehlgeschlagen. Überprüfe die Einstellungen.",
+        u8"Échec de l'enregistrement. Vérifiez les paramètres.",
+        u8"Salvataggio non riuscito. Controlla le Impostazioni.",
+        u8"Zapis nie powiódł się. Sprawdź Ustawienia.",
+        u8"Opslaan mislukt. Controleer Instellingen.",
+    } },
+    { u8"Error: Slot file empty or missing!", {
+        u8"Hata: Slot dosyası boş veya eksik!",
+        u8"¡Error: Archivo de ranura vacío o faltante!",
+        u8"Erro: Arquivo do slot vazio ou ausente!",
+        u8"Ошибка: Файл слота пуст или отсутствует!",
+        u8"Fehler: Slot-Datei leer oder fehlt!",
+        u8"Erreur : fichier d'emplacement vide ou manquant !",
+        u8"Errore: file slot vuoto o mancante!",
+        u8"Błąd: Plik slotu jest pusty lub brakujący!",
+        u8"Fout: Slotbestand leeg of ontbreekt!",
+    } },
+    { u8"Decrypting & Switching Account...", {
+        u8"Şifre Çözülüyor & Hesap Değiştiriliyor...",
+        u8"Desencriptando y Cambiando Cuenta...",
+        u8"Descriptografando e Trocando Conta...",
+        u8"Расшифровка и переключение аккаунта...",
+        u8"Entschlüssele & wechsle Konto...",
+        u8"Décryptage et changement de compte...",
+        u8"Decrittografia e cambio account...",
+        u8"Odszyfrowywanie i przełączanie konta...",
+        u8"Decoderen en wisselen van account...",
+    } },
+    { u8"Error: File decryption failed! Corrupted data.", {
+        u8"Hata: Dosya şifresi çözülemedi! Bozuk veri.",
+        u8"¡Error: Falló la desencriptación del archivo! Datos corruptos.",
+        u8"Erro: Falha na descriptografia do arquivo! Dados corrompidos.",
+        u8"Ошибка: Сбой расшифровки файла! Поврежденные данные.",
+        u8"Fehler: Datei-Entschlüsselung fehlgeschlagen! Beschädigte Daten.",
+        u8"Erreur : échec du décryptage du fichier ! Données corrompues.",
+        u8"Errore: decrittografia del file non riuscita! Dati danneggiati.",
+        u8"Błąd: Odszyfrowanie pliku nie powiodło się! Uszkodzone dane.",
+        u8"Fout: bestandsdecodering mislukt! Beschadigde gegevens.",
+    } },
+    { u8"Account Switched. Game Restarting.", {
+        u8"Hesap Değiştirildi. Oyun Yeniden Başlatılıyor.",
+        u8"Cuenta Cambiada. Reiniciando Juego.",
+        u8"Conta Trocada. Reiniciando Jogo.",
+        u8"Аккаунт переключен. Перезапуск игры.",
+        u8"Konto gewechselt. Spiel wird neu gestartet.",
+        u8"Compte changé. Redémarrage du jeu.",
+        u8"Account cambiato. Riavvio del gioco.",
+        u8"Konto przełączone. Ponowne uruchomienie gry.",
+        u8"Account gewijzigd. Spel opnieuw opstarten.",
+    } },
+    { u8"Detecting Input...", {
+        u8"Giriş Bekleniyor...",
+        u8"Detectando Entrada...",
+        u8"Detectando Entrada...",
+        u8"Обнаружение ввода...",
+        u8"Eingabe wird erkannt...",
+        u8"Détection de l'entrée...",
+        u8"Rilevamento ingresso...",
+        u8"Wykrywanie wejścia...",
+        u8"Invoer detecteren...",
+    } },
+    { u8"Error: Could not read list. Check ADB path.", {
+        u8"Hata: Liste okunamadı. ADB yolunu kontrol edin.",
+        u8"Error: No se pudo leer la lista. Verifique la ruta de ADB.",
+        u8"Erro: Não foi possível ler a lista. Verifique o caminho do ADB.",
+        u8"Ошибка: Не удалось прочитать список. Проверьте путь ADB.",
+        u8"Fehler: Liste konnte nicht gelesen werden. ADB-Pfad prüfen.",
+        u8"Erreur : Impossible de lire la liste. Vérifiez le chemin ADB.",
+        u8"Errore: impossibile leggere l'elenco. Controllare il percorso ADB.",
+        u8"Błąd: Nie można odczytać listy. Sprawdź ścieżkę ADB.",
+        u8"Fout: Kan de lijst niet lezen. Controleer het pad ADB.",
+    } },
+    { u8"Input Found: ", {
+        u8"Giriş Bulundu: ",
+        u8"Entrada encontrada: ",
+        u8"Entrada encontrada: ",
+        u8"Обнаружен ввод: ",
+        u8"Eingabe gefunden: ",
+        u8"Entrée trouvée : ",
+        u8"Ingresso trovato: ",
+        u8"Znaleziono wejście: ",
+        u8"Invoer gevonden: ",
+    } },
+    { u8"Failed. Retrying next time...", {
+        u8"Başarısız. Bir dahaki sefere yeniden deneniyor...",
+        u8"Error. Reintentando la próxima vez...",
+        u8"Falha. Tentando novamente na próxima vez...",
+        u8"Ошибка. Повторю попытку в следующий раз...",
+        u8"Fehlgeschlagen. Nächstes Mal erneut versuchen...",
+        u8"Échec. Je réessaierai la prochaine fois...",
+        u8"Non riuscito. Riprova la prossima volta...",
+        u8"Nie udało się. Spróbuję następnym razem...",
+        u8"Mislukt. Volgende keer opnieuw proberen...",
+    } },
+    { u8"Executing swipe...", {
+        u8"Kaydırma yapılıyor...",
+        u8"Ejecutando deslizamiento...",
+        u8"Executando gesto de deslizar...",
+        u8"Выполняется свайп...",
+        u8"Wischgeste wird ausgeführt...",
+        u8"Exécution du balayage...",
+        u8"Esecuzione dello scorrimento...",
+        u8"Wykonywanie przesunięcia...",
+        u8"Veegbeweging uitvoeren...",
+    } },
+    { u8"Swipe complete.", {
+        u8"Kaydırma tamamlandı.",
+        u8"Deslizamiento completado.",
+        u8"Deslizamento concluído.",
+        u8"Свайп завершён.",
+        u8"Wischgeste abgeschlossen.",
+        u8"Balayage terminé.",
+        u8"Scorrimento completato.",
+        u8"Przesunięcie zakończone.",
+        u8"Veegbeweging voltooid.",
+    } },
+    { u8"Minitouch connection failed.", {
+        u8"Minitouch bağlantısı başarısız oldu.",
+        u8"Minitouch falló la conexión.",
+        u8"Minitouch conexão falhou.",
+        u8"Minitouch не удалось подключиться.",
+        u8"Minitouch Verbindung fehlgeschlagen.",
+        u8"Minitouch a échoué.",
+        u8"Minitouch non riuscita.",
+        u8"Minitouch połączenie nie powiodło się.",
+        u8"Minitouch-verbinding mislukt.",
+    } },
+    { u8"ROTATION COMPLETE | INSTANCE ", {
+        u8"HESAP DÖNGÜSÜ TAMAMLANDI | BOT ",
+        u8"ROTACIÓN COMPLETA | INSTANCIA ",
+        u8"ROTAÇÃO COMPLETA | EXEMPLO ",
+        u8"РОТАЦИЯ ЗАВЕРШЕНА | ЭКЗЕМПЛЯР ",
+        u8"ROTATION ABGESCHLOSSEN | INSTANZ ",
+        u8"ROTATION TERMINÉE | INSTANCE ",
+        u8"ROTAZIONE COMPLETATA | ISTANZA ",
+        u8"OBRÓT ZAKOŃCZONY | INSTANCJA ",
+        u8"ROTATIE VOLTOOID | INSTANCTIE ",
+    } },
+    { u8"BARN INVENTORY TOTALS", {
+        u8"AMBAR ENVANTER TOPLAMLARI",
+        u8"TOTALES DEL INVENTARIO DEL GRANERO",
+        u8"TOTAIS DE INVENTÁRIO DO CELEIRO",
+        u8"ОБЩАЯ ИНВЕНТАРИЗАЦИЯ САРАТА",
+        u8"SCHEUNENVORSTANDSGESAMTE",
+        u8"TOTAUX DE L'INVENTAIRE DE LA GRANGE",
+        u8"TOTALI INVENTARIO FIENILE",
+        u8"SUMA ZAPASU STODOŁY",
+        u8"STALINVENTARISTOTALEN",
+    } },
+    { u8"Rotation Delta Report Sent!", {
+        u8"Döngü Delta Raporu Gönderildi!",
+        u8"¡Informe Delta de Rotación Enviado!",
+        u8"Relatório Delta de Rotação Enviado!",
+        u8"Отчет о дельте ротации отправлен!",
+        u8"Rotations-Delta-Bericht gesendet!",
+        u8"Rapport delta de rotation envoyé !",
+        u8"Rapporto Delta rotazione inviato!",
+        u8"Wysłano raport o delcie rotacji!",
+        u8"Rotatiedeltarapport verzonden!",
+    } },
+    { u8"Entering Sales Mode...", {
+        u8"Satış Moduna Giriliyor...",
+        u8"Entrando en Modo de Ventas...",
+        u8"Entrando no Modo de Vendas...",
+        u8"Вход в режим продаж...",
+        u8"Wechsle in den Verkaufsmodus...",
+        u8"Entrée en mode vente...",
+        u8"Accesso alla modalità vendita...",
+        u8"Wejście do trybu sprzedaży...",
+        u8"Verkoopmodus openen...",
+    } },
+    { u8"Searching Shop... ", {
+        u8"Mağaza aranıyor... ",
+        u8"Buscando Tienda... ",
+        u8"Pesquisando na loja... ",
+        u8"Поиск магазина... ",
+        u8"Shop durchsuchen... ",
+        u8"Recherche dans la boutique... ",
+        u8"Ricerca nel negozio... ",
+        u8"Wyszukiwanie sklepu... ",
+        u8"Winkel zoeken... ",
+    } },
+    { u8"Shop NOT found. Retrying... (", {
+        u8"Mağaza bulunamadı. Yeniden deneniyor... (",
+        u8"Tienda NO encontrada. Reintentando... (",
+        u8"Loja NÃO encontrada. Retrying... (",
+        u8"Магазин НЕ найден. Повторная попытка... (",
+        u8"Shop NICHT gefunden. Erneuter Versuch... (",
+        u8"Boutique NON trouvée. Nouvelle tentative... (",
+        u8"Negozio NON trovato. Nuovo tentativo... (",
+        u8"NIE znaleziono sklepu. Ponawiam próbę... (",
+        u8"Winkel NIET gevonden. Opnieuw proberen... (",
+    } },
+    { u8"Shop click missed (Bug)! Retrying... (", {
+        u8"Mağaza tıklaması kaçırıldı (Hata)! Yeniden deneniyor... (",
+        u8"¡Se perdió el clic en la tienda (Error)! Reintentando... (",
+        u8"Clique na loja perdido (Bug)! Retrying... (",
+        u8"Пропущен клик в магазине (ошибка)! Повторная попытка... (",
+        u8"Shop-Klick verpasst (Bug)! Erneuter Versuch... (",
+        u8"Clic sur la boutique manqué (Bug) ! Nouvelle tentative... (",
+        u8"Clic sul negozio mancato (bug)! Nuovo tentativo... (",
+        u8"Brak kliknięcia w sklepie (Błąd)! Ponawiam próbę... (",
+        u8"Winkelklik gemist (bug)! Opnieuw proberen... (",
+    } },
+    { u8"Failed to open shop menu. Skipping sales.", {
+        u8"Dükkan menüsü açılamadı. Satışlar atlanıyor.",
+        u8"Error al abrir el menú de la tienda. Omitiendo ventas.",
+        u8"Falha ao abrir o menu da loja. Pulando vendas.",
+        u8"Не удалось открыть меню магазина. Пропуск продаж.",
+        u8"Fehler beim Öffnen des Shop-Menüs. Verkäufe werden übersprungen.",
+        u8"Échec de l'ouverture du menu de la boutique. Sauter les ventes.",
+        u8"Impossibile aprire il menu del negozio. Saltare le vendite.",
+        u8"Nie udało się otworzyć menu sklepu. Pomijanie sprzedaży.",
+        u8"Kan winkelmenu niet openen. Verkoop overslaan.",
+    } },
+    { u8"Sale detected. Clearing quarantine and returning to the farm.", {
+        u8"Satış algılandı. Karantinayı temizleyip çiftliğe dönüyoruz.",
+        u8"Venta detectada. Despejando la cuarentena y regresando a la finca.",
+        u8"Venda detectada. Saindo da quarentena e retornando para a fazenda.",
+        u8"Обнаружена продажа. Проходим карантин и возвращаемся на ферму.",
+        u8"Verkauf erkannt. Quarantäne beenden und zur Farm zurückkehren.",
+        u8"Vente détectée. Fin de la quarantaine et retour à la ferme.",
+        u8"Vendita rilevata. Superamento della quarantena e ritorno alla fattoria.",
+        u8"Wykryto sprzedaż. Zakończenie kwarantanny i powrót na fermę.",
+        u8"Uitverkoop gedetecteerd. Quarantaine opruimen en terugkeren naar de boerderij.",
+    } },
+    { u8"Collecting coins...", {
+        u8"Altınlar toplanıyor...",
+        u8"Recolectando monedas...",
+        u8"Coletando moedas...",
+        u8"Сбор монет...",
+        u8"Münzen sammeln...",
+        u8"Collecter des pièces...",
+        u8"Collezionare monete...",
+        u8"Zbieranie monet...",
+        u8"Munten verzamelen...",
+    } },
+    { u8"Shop is full.", {
+        u8"Dükkan dolu.",
+        u8"La tienda está llena.",
+        u8"A loja está cheia.",
+        u8"Магазин полон.",
+        u8"Shop ist voll.",
+        u8"La boutique est pleine.",
+        u8"Il negozio è pieno.",
+        u8"Sklep jest pełny.",
+        u8"Winkel is vol.",
+    } },
+    { u8"Shop is full. Sales are paused.", {
+        u8"Mağaza dolu. Satışlar durduruldu.",
+        u8"Shop is full. Las ventas están en pausa.",
+        u8"A loja está cheia. Sales are paused.",
+        u8"Магазин переполнен. Продажи приостановлены.",
+        u8"Der Shop ist voll. Der Verkauf wird pausiert.",
+        u8"La boutique est pleine. Les ventes sont suspendues.",
+        u8"Il negozio è pieno. Le vendite sono sospese.",
+        u8"Sklep jest pełny. Sprzedaż zostaje wstrzymana.",
+        u8"Winkel is vol. De verkoop is onderbroken.",
+    } },
+    { u8"Advertisement already placed this cycle. Closing the shop.", {
+        u8"Bu döngüde reklam zaten verildi. Dükkan kapatılıyor.",
+        u8"Anuncio ya colocado en este ciclo. Cerrando la tienda.",
+        u8"Anúncio já colocado neste ciclo. Closing the shop.",
+        u8"Реклама этого цикла уже размещена. Закрытие магазина.",
+        u8"In diesem Zyklus wurde bereits Werbung geschaltet. Schließung des Ladens.",
+        u8"Annonce déjà placée ce cycle. Fermeture de la boutique.",
+        u8"Annuncio già inserito in questo ciclo. Chiusura del negozio.",
+        u8"Ogłoszenie umieściło już ten cykl. Zamknięcie sklepu.",
+        u8"Advertentie deze cyclus al geplaatst. Het sluiten van de winkel.",
+    } },
+    { u8"Checking advertisement availability...", {
+        u8"Reklam kullanılabilirliği kontrol ediliyor...",
+        u8"Comprobando disponibilidad de publicidad...",
+        u8"Verificando disponibilidade de anúncios...",
+        u8"Проверка доступности рекламы...",
+        u8"Anzeigenverfügbarkeit wird überprüft...",
+        u8"Vérification de la disponibilité des publicités...",
+        u8"Verifica della disponibilità dell'annuncio in corso...",
+        u8"Sprawdzanie dostępności ogłoszenia...",
+        u8"Beschikbaarheid van advertenties controleren...",
+    } },
+    { u8"Advertisement icon not found. Retrying: ", {
+        u8"Reklam simgesi bulunamadı. Yeniden deneniyor: ",
+        u8"No se encontró el ícono de anuncio. Reintentando: ",
+        u8"Ícone de anúncio não encontrado. Retrying: ",
+        u8"Значок рекламы не найден. Повторная попытка: ",
+        u8"Werbesymbol nicht gefunden. Wiederholung: ",
+        u8"Icône de publicité introuvable. Nouvelle tentative : ",
+        u8"Icona della pubblicità non trovata. Nuovo tentativo: ",
+        u8"Nie znaleziono ikony reklamy. Ponawianie próby: ",
+        u8"Advertentiepictogram niet gevonden. Opnieuw proberen: ",
+    } },
+    { u8"Advertisement available. Publishing...", {
+        u8"Reklam mevcut. Yayınlanıyor...",
+        u8"Anuncio disponible. Publicando...",
+        u8"Anúncio disponível. Publicando...",
+        u8"Доступна реклама. Публикация...",
+        u8"Werbung verfügbar. Veröffentlichung...",
+        u8"Publicité disponible. Publication...",
+        u8"Annuncio disponibile. Pubblicazione...",
+        u8"Reklama dostępna. Publikowanie...",
+        u8"Advertentie beschikbaar. Publiceren...",
+    } },
+    { u8"Advertisement published.", {
+        u8"Reklam yayınlandı.",
+        u8"Advertisement published.",
+        u8"Anúncio publicado.",
+        u8"Реклама опубликована.",
+        u8"Anzeige veröffentlicht.",
+        u8"Annonce publiée.",
+        u8"Annuncio pubblicato.",
+        u8"Ogłoszenie opublikowane.",
+        u8"Advertentie gepubliceerd.",
+    } },
+    { u8"Waiting 60 seconds for crops to sell...", {
+        u8"Mahsullerin satılması için 60 saniye bekleniyor...",
+        u8"Esperando 60 segundos para que se vendan las cosechas...",
+        u8"Aguardando 60 segundos para que as colheitas sejam vendidas...",
+        u8"Ожидание продажи урожая 60 секунд...",
+        u8"60 Sekunden auf den Verkauf der Ernte warten...",
+        u8"Attendre 60 secondes pour que les récoltes se vendent...",
+        u8"In attesa di 60 secondi per la vendita dei raccolti...",
+        u8"Oczekiwanie 60 sekund na sprzedaż plonów...",
+        u8"60 seconden wachten totdat de gewassen zijn verkocht...",
+    } },
+    { u8"Waiting for sales: ", {
+        u8"Satış bekleniyor: ",
+        u8"Esperando ventas: ",
+        u8"Aguardando vendas: ",
+        u8"Жду продаж: ",
+        u8"Warten auf Verkäufe: ",
+        u8"En attente de ventes : ",
+        u8"In attesa delle vendite: ",
+        u8"Oczekiwanie na sprzedaż: ",
+        u8"Wachten op verkoop: ",
+    } },
+    { u8"Advertisement is on cooldown. Pausing sales for this account.", {
+        u8"Reklam beklemede. Bu hesap için satışlar duraklatılıyor.",
+        u8"El anuncio está en tiempo de reutilización. Pausar las ventas de esta cuenta.",
+        u8"O anúncio está em espera. Pausando vendas para esta conta.",
+        u8"Реклама находится на восстановлении. Приостановка продаж для этого аккаунта.",
+        u8"Die Werbung befindet sich in der Abklingzeit. Der Verkauf für dieses Konto wird pausiert.",
+        u8"La publicité est en temps de recharge. Suspendre les ventes pour ce compte.",
+        u8"La pubblicità è in fase di recupero. Sospensione delle vendite per questo account.",
+        u8"Reklama się odnawia. Wstrzymywanie sprzedaży dla tego konta.",
+        u8"Advertentie is in cooldownfase. Verkoop voor dit account wordt onderbroken.",
+    } },
+    { u8"An empty crate is available. Resuming normal operation.", {
+        u8"Boş bir sandık mevcut. Normal çalışmaya devam ediliyor.",
+        u8"Hay una caja vacía disponible. Reanudando el funcionamiento normal.",
+        u8"Uma caixa vazia está disponível. Retomando a operação normal.",
+        u8"Доступен пустой ящик. Возобновление нормальной работы.",
+        u8"Eine leere Kiste ist verfügbar. Wiederaufnahme des Normalbetriebs.",
+        u8"Une caisse vide est disponible. Reprise du fonctionnement normal.",
+        u8"È disponibile una cassa vuota. Ripresa del normale funzionamento.",
+        u8"Dostępna jest pusta skrzynka. Wznawianie normalnej pracy.",
+        u8"Er is een lege krat beschikbaar. Hervatting van de normale werking.",
+    } },
+    { u8"Checking transfer requests...", {
+        u8"Transfer talebi kontrol ediliyor...",
+        u8"Comprobando solicitudes de transferencia...",
+        u8"Verificando solicitações de transferência...",
+        u8"Проверка запросов на передачу...",
+        u8"Überprüfung der Transferanfragen...",
+        u8"Vérification des demandes de transfert...",
+        u8"Verifica delle richieste di trasferimento in corso...",
+        u8"Sprawdzanie żądań transferu...",
+        u8"Controleer overdrachtsverzoeken...",
+    } },
+    { u8"Transfer requested: ", {
+        u8"Transfer istendi: ",
+        u8"Transferencia solicitada: ",
+        u8"Transferência solicitada: ",
+        u8"Запрошена передача: ",
+        u8"Übertragung angefordert: ",
+        u8"Transfert demandé : ",
+        u8"Trasferimento richiesto: ",
+        u8"Zażądano przeniesienia: ",
+        u8"Overdracht aangevraagd: ",
+    } },
+    { u8" remaining", {
+        u8" kaldı",
+        u8" restante",
+        u8" remaining",
+        u8" осталось",
+        u8" übrig",
+        u8" restant",
+        u8" rimanente",
+        u8" pozostało",
+        u8" resterend",
+    } },
+    { u8"Storage account is not in the friend list. Sending a request...", {
+        u8"Depolama hesabı arkadaş listesinde değil. Bir istek gönderiliyor...",
+        u8"La cuenta de almacenamiento no está en la lista de amigos. Sending a request...",
+        u8"A conta de armazenamento não está na lista de amigos. Enviando uma solicitação...",
+        u8"Учетной записи хранения нет в списке друзей. Отправка запроса...",
+        u8"Das Speicherkonto ist nicht in der Freundesliste. Anfrage senden...",
+        u8"Le compte de stockage n'est pas dans la liste d'amis. Envoi d'une demande...",
+        u8"L'account di archiviazione non è nell'elenco degli amici. Invio di una richiesta...",
+        u8"Konta magazynu nie ma na liście znajomych. Wysyłanie prośby...",
+        u8"Opslagaccount staat niet in de vriendenlijst. Een verzoek verzenden...",
+    } },
+    { u8"Transfer failed: Could not send the friend request.", {
+        u8"Aktarım başarısız oldu: Arkadaşlık isteği gönderilemedi.",
+        u8"Transferencia fallida: No se pudo enviar la solicitud de amistad.",
+        u8"Falha na transferência: não foi possível enviar o pedido de amizade.",
+        u8"Передача не удалась: не удалось отправить запрос на добавление в друзья.",
+        u8"Übertragung fehlgeschlagen: Die Freundschaftsanfrage konnte nicht gesendet werden.",
+        u8"Échec du transfert : impossible d'envoyer la demande d'ami.",
+        u8"Trasferimento non riuscito: impossibile inviare la richiesta di amicizia.",
+        u8"Transfer nie powiódł się: Nie można wysłać zaproszenia do znajomych.",
+        u8"Overdracht mislukt: kon het vriendschapsverzoek niet verzenden.",
+    } },
+    { u8"WAITING FOR FRIEND REQUEST", {
+        u8"ARKADAŞLIK İSTEĞİ BEKLENİYOR",
+        u8"ESPERANDO SOLICITUD DE AMIGA",
+        u8"AGUARDANDO PEDIDO DE AMIZADE",
+        u8"ОЖИДАНИЕ ЗАПРОСА В ДРУЖИ",
+        u8"WARTEN AUF FREUNDSCHAFTSANFRAGE",
+        u8"EN ATTENTE DEMANDE D'AMI",
+        u8"IN ATTESA DI RICHIESTA DI AMICIZIA",
+        u8"OCZEKUJĘ NA ZAPROSZENIE DO ZNAJOMYCH",
+        u8"WACHTEN OP VRIENDVERZOEK",
+    } },
+    { u8"Transfer cancelled by the storage account.", {
+        u8"Aktarım, depolama hesabı tarafından iptal edildi.",
+        u8"Transferencia cancelada por la cuenta de almacenamiento.",
+        u8"Transferência cancelada pela conta de armazenamento.",
+        u8"Передача отменена учетной записью хранения.",
+        u8"Übertragung durch das Speicherkonto abgebrochen.",
+        u8"Transfert annulé par le compte de stockage.",
+        u8"Trasferimento annullato dall'account di archiviazione.",
+        u8"Transfer anulowany przez konto magazynu.",
+        u8"Overdracht geannuleerd door het opslagaccount.",
+    } },
+    { u8"Friend request accepted. Reopening the shop...", {
+        u8"Arkadaşlık isteği kabul edildi. Mağazayı yeniden açıyoruz...",
+        u8"Solicitud de amistad aceptada. Reabriendo la tienda...",
+        u8"Pedido de amizade aceito. Reopening the shop...",
+        u8"Запрос на добавление в друзья принят. Возобновление работы магазина...",
+        u8"Freundschaftsanfrage angenommen. Wiedereröffnung des Ladens...",
+        u8"Demande d'ami acceptée. Réouverture de la boutique...",
+        u8"Richiesta di amicizia accettata. Riapertura del negozio...",
+        u8"Zaproszenie do grona znajomych zaakceptowane. Ponowne otwarcie sklepu...",
+        u8"Vriendschapsverzoek geaccepteerd. De winkel heropenen...",
+    } },
+    { u8"Shop found. Opening...", {
+        u8"Mağaza bulundu. Açılıyor...",
+        u8"Tienda encontrada. Abriendo...",
+        u8"Loja encontrada. Opening...",
+        u8"Магазин найден. Открытие...",
+        u8"Shop gefunden. Eröffnung...",
+        u8"Boutique trouvée. Ouverture...",
+        u8"Negozio trovato. Apertura...",
+        u8"Znaleziono sklep. Otwieranie...",
+        u8"Winkel gevonden. Openen...",
+    } },
+    { u8"Shop opened.", {
+        u8"Mağaza açıldı.",
+        u8"Tienda abierta.",
+        u8"Loja aberta.",
+        u8"Магазин открыт.",
+        u8"Shop eröffnet.",
+        u8"Boutique ouverte.",
+        u8"Negozio aperto.",
+        u8"Sklep otwarty.",
+        u8"Winkel geopend.",
+    } },
+    { u8"Shop did not open. Retrying...", {
+        u8"Mağaza açılmadı. Yeniden deneniyor...",
+        u8"La tienda no abrió. Reintentando...",
+        u8"A loja não abriu. Retrying...",
+        u8"Магазин не открылся. Повторная попытка...",
+        u8"Shop wurde nicht geöffnet. Erneuter Versuch...",
+        u8"La boutique n'a pas été ouverte. Nouvelle tentative...",
+        u8"Il negozio non è stato aperto. Nuovo tentativo...",
+        u8"Sklep nie otworzył się. Ponawiam próbę...",
+        u8"Winkel is niet geopend. Opnieuw proberen...",
+    } },
+    { u8"Shop is not visible yet. Waiting...", {
+        u8"Mağaza henüz görünmüyor. Bekleniyor...",
+        u8"La tienda aún no está visible. Esperando...",
+        u8"A loja ainda não está visível. Waiting...",
+        u8"Магазин пока не виден. Ожидание...",
+        u8"Shop ist noch nicht sichtbar. Warten...",
+        u8"La boutique n'est pas encore visible. En attendant...",
+        u8"Il negozio non è ancora visibile. In attesa...",
+        u8"Sklep nie jest jeszcze widoczny. Czekam...",
+        u8"Winkel is nog niet zichtbaar. Wachten...",
+    } },
+    { u8"Transfer failed: The shop could not be opened.", {
+        u8"Aktarım başarısız oldu: Mağaza açılamadı.",
+        u8"Transferencia fallida: No se pudo abrir la tienda.",
+        u8"Falha na transferência: não foi possível abrir a loja.",
+        u8"Передача не удалась: магазин не удалось открыть.",
+        u8"Übertragung fehlgeschlagen: Der Shop konnte nicht geöffnet werden.",
+        u8"Échec du transfert : la boutique n'a pas pu être ouverte.",
+        u8"Trasferimento non riuscito: impossibile aprire il negozio.",
+        u8"Transfer nie powiódł się: Nie można otworzyć sklepu.",
+        u8"Overdracht mislukt: de winkel kon niet worden geopend.",
+    } },
+    { u8"WAITING FOR STORAGE ACCOUNT", {
+        u8"DEPOLAMA HESABI BEKLENİYOR",
+        u8"ESPERANDO CUENTA DE ALMACENAMIENTO",
+        u8"AGUARDANDO CONTA DE ARMAZENAMENTO",
+        u8"ОЖИДАНИЕ АККАУНТА ХРАНЕНИЯ",
+        u8"WARTEN AUF SPEICHERKONTO",
+        u8"EN ATTENTE DE COMPTE DE STOCKAGE",
+        u8"IN ATTESA DELL'ACCOUNT DI ARCHIVIAZIONE",
+        u8"OCZEKUJĘ NA KONTO PRZECHOWYWANIA",
+        u8"WACHTEN OP OPSLAGACCOUNT",
+    } },
+    { u8"Transfer failed: The storage account could not open the farm.", {
+        u8"Aktarım başarısız: Depo hesabı çiftliği açamadı.",
+        u8"Error en la transferencia: la cuenta de almacenamiento no pudo abrir la granja.",
+        u8"Falha na transferência: a conta de armazenamento não conseguiu abrir o farm.",
+        u8"Передача не удалась: учетной записи хранения не удалось открыть ферму.",
+        u8"Übertragung fehlgeschlagen: Das Speicherkonto konnte die Farm nicht öffnen.",
+        u8"Échec du transfert : le compte de stockage n'a pas pu ouvrir la batterie de serveurs.",
+        u8"Trasferimento non riuscito: l'account di archiviazione non è riuscito ad aprire la farm.",
+        u8"Transfer nie powiódł się: konto magazynu nie mogło otworzyć farmy.",
+        u8"Overdracht mislukt: het opslagaccount kan de farm niet openen.",
+    } },
+    { u8"Item listed. Waiting for the storage account...", {
+        u8"Öğe listelendi. Depolama hesabı bekleniyor...",
+        u8"Elemento listado. Esperando la cuenta de almacenamiento...",
+        u8"Item listado. Aguardando a conta de armazenamento...",
+        u8"Товар указан. Ожидание учетной записи хранения...",
+        u8"Artikel aufgeführt. Warten auf das Speicherkonto...",
+        u8"Élément répertorié. En attente du compte de stockage...",
+        u8"Elemento elencato. In attesa dell'account di archiviazione...",
+        u8"Element na liście. Oczekiwanie na konto magazynu...",
+        u8"Artikel vermeld. Wachten op het opslagaccount...",
+    } },
+    { u8"Transfer completed. Collecting coins...", {
+        u8"Aktarım tamamlandı. Altınlar toplanıyor...",
+        u8"Transferencia completada. Collecting coins...",
+        u8"Transferência concluída. Collecting coins...",
+        u8"Передача завершена. Собираем монеты...",
+        u8"Übertragung abgeschlossen. Münzen sammeln...",
+        u8"Transfert terminé. Collectionner des pièces...",
+        u8"Trasferimento completato. Collezionare monete...",
+        u8"Transfer zakończony. Zbieranie monet...",
+        u8"Overdracht voltooid. Munten verzamelen...",
+    } },
+    { u8"More items remain. Keeping the storage account in the shop...", {
+        u8"Aktarılacak başka eşyalar var. Depo hesabı dükkanda bekletiliyor...",
+        u8"Quedan más elementos. Mantener la cuenta de almacenamiento en la tienda...",
+        u8"Restam mais itens. Mantendo a conta de armazenamento na loja...",
+        u8"Осталось больше элементов. Ведение складского учета в магазине...",
+        u8"Es verbleiben noch weitere Artikel. Aufbewahrung des Lagerkontos im Shop...",
+        u8"Il reste d'autres éléments. Tenue du compte de stockage dans la boutique...",
+        u8"Rimangono altri elementi. Conservazione dell'account di archiviazione nel negozio...",
+        u8"Pozostało więcej pozycji. Prowadzenie konta magazynu w sklepie...",
+        u8"Er zijn nog meer items over. Het bijhouden van de opslagrekening in de winkel...",
+    } },
+    { u8"All items were transferred. Closing the transfer session.", {
+        u8"Tüm öğeler aktarıldı. Aktarım oturumu kapatılıyor.",
+        u8"Todos los elementos fueron transferidos. Cerrando la sesión de transferencia.",
+        u8"Todos os itens foram transferidos. Fechando a sessão de transferência.",
+        u8"Все элементы были перенесены. Закрытие сеанса передачи.",
+        u8"Alle Artikel wurden übertragen. Schließen der Übertragungssitzung.",
+        u8"Tous les éléments ont été transférés. Clôture de la session de transfert.",
+        u8"Tutti gli elementi sono stati trasferiti. Chiusura della sessione di trasferimento.",
+        u8"Wszystkie elementy zostały przeniesione. Zamknięcie sesji transferowej.",
+        u8"Alle items zijn overgedragen. De overdrachtsessie sluiten.",
+    } },
+    { u8"Transfer timed out while waiting for confirmation.", {
+        u8"Onay beklenirken aktarım zaman aşımına uğradı.",
+        u8"Se agotó el tiempo de transferencia mientras se esperaba la confirmación.",
+        u8"A transferência expirou enquanto aguardava confirmação.",
+        u8"Время ожидания передачи истекло.",
+        u8"Beim Warten auf eine Bestätigung ist bei der Übertragung eine Zeitüberschreitung aufgetreten.",
+        u8"Le délai de transfert a expiré en attendant la confirmation.",
+        u8"Trasferimento scaduto durante l'attesa della conferma.",
+        u8"Upłynął limit czasu transferu podczas oczekiwania na potwierdzenie.",
+        u8"Er is een time-out voor de overdracht opgetreden tijdens het wachten op bevestiging.",
+    } },
+    { u8"No crops to sell.", {
+        u8"Satılacak ekin yok.",
+        u8"No hay cultivos para vender.",
+        u8"Não há culturas para vender.",
+        u8"Нет культур для продажи.",
+        u8"Keine Pflanzen zum Verkaufen.",
+        u8"Aucune récolte à vendre.",
+        u8"Nessun raccolto da vendere.",
+        u8"Brak upraw do sprzedaży.",
+        u8"Geen gewassen om te verkopen.",
+    } },
+    { u8"Placing Advertisement...", {
+        u8"İlan Veriliyor...",
+        u8"Colocando Anuncio...",
+        u8"Colocando Anúncio...",
+        u8"Размещение объявления...",
+        u8"Schalte Anzeige...",
+        u8"Placement d'une annonce...",
+        u8"Inserimento di pubblicità...",
+        u8"Umieszczanie reklamy...",
+        u8"Advertentie plaatsen...",
+    } },
+    { u8"Item Sold.", {
+        u8"Eşya Satıldı.",
+        u8"Artículo Vendido.",
+        u8"Item Vendido.",
+        u8"Предмет продан.",
+        u8"Item verkauft.",
+        u8"Article vendu.",
+        u8"Articolo venduto.",
+        u8"Przedmiot sprzedany.",
+        u8"Artikel verkocht.",
+    } },
+    { u8"Put on Sale button not found, using custom x,y coordinates.", {
+        u8"Özel x,y koordinatları kullanılarak Satışa Sun düğmesi bulunamadı.",
+        u8"No se encontró el botón Poner en venta, usando coordenadas x,y personalizadas.",
+        u8"Botão Colocar à venda não encontrado, usando coordenadas x,y personalizadas.",
+        u8"Кнопка «Выставить на продажу» не найдена, используются пользовательские координаты x,y.",
+        u8"Die Schaltfläche „Zum Verkauf anbieten“ wurde nicht gefunden, da benutzerdefinierte XY-Koordinaten verwendet werden.",
+        u8"Bouton de mise en vente introuvable, utilisant des coordonnées x, y personnalisées.",
+        u8"Pulsante Metti in vendita non trovato, utilizzando le coordinate x,y personalizzate.",
+        u8"Nie znaleziono przycisku Wystaw sprzedaż, używając niestandardowych współrzędnych x, y.",
+        u8"Knop Uitverkoop niet gevonden, met aangepaste x,y-coördinaten.",
+    } },
+    { u8"Bot Started.", {
+        u8"Bot Başlatıldı.",
+        u8"Bot Iniciado.",
+        u8"Bot Iniciado.",
+        u8"Бот запущен.",
+        u8"Bot gestartet.",
+        u8"Bot Démarré.",
+        u8"Bot Avviato.",
+        u8"Bot Rozpoczęto.",
+        u8"Bot Gestart.",
+    } },
+    { u8"Starting Minitouch and opening the local port...", {
+        u8"Minitouch başlatılıyor ve yerel bağlantı noktası açılıyor...",
+        u8"Iniciando Minitouch y abriendo el puerto local...",
+        u8"Iniciando Minitouch e abrindo a porta local...",
+        u8"Запуск Minitouch и открытие локального порта...",
+        u8"Starten von Minitouch und Öffnen des lokalen Ports ...",
+        u8"Démarrage de Minitouch et ouverture du port local...",
+        u8"Avvio di Minitouch e apertura della porta locale...",
+        u8"Uruchamiam Minitouch i otwieram port lokalny...",
+        u8"Minitouch starten en de lokale poort openen...",
+    } },
+    { u8"Single Account Mode", {
+        u8"Tek Hesap Modu",
+        u8"Modo de Cuenta Única",
+        u8"Modo de Conta Única",
+        u8"Режим одного аккаунта",
+        u8"Einzelkonto-Modus",
+        u8"Mode compte unique",
+        u8"Modalità account singolo",
+        u8"Tryb pojedynczego konta",
+        u8"Modus voor één account",
+    } },
+    { u8"Waiting for the advertisement cooldown: ", {
+        u8"Reklamın bekleme süresi bekleniyor: ",
+        u8"Esperando el tiempo de reutilización del anuncio: ",
+        u8"Aguardando o resfriamento do anúncio: ",
+        u8"Ожидание восстановления рекламы: ",
+        u8"Warten auf die Abklingzeit der Werbung: ",
+        u8"En attente du temps de recharge de la publicité : ",
+        u8"In attesa del raffreddamento dell'annuncio: ",
+        u8"Oczekiwanie na upłynięcie reklamy: ",
+        u8"Wachten op het afkoelen van de advertentie: ",
+    } },
+    { u8"Advertisement cooldown: ", {
+        u8"Reklam bekleme süresi: ",
+        u8"Enfriamiento del anuncio: ",
+        u8"Tempo de espera do anúncio: ",
+        u8"Время восстановления рекламы: ",
+        u8"Abklingzeit der Werbung: ",
+        u8"Temps de recharge de la publicité : ",
+        u8"Tempo di recupero della pubblicità: ",
+        u8"Czas oczekiwania na reklamę: ",
+        u8"Afkoelperiode voor advertenties: ",
+    } },
+    { u8"Shop is full for this account. Moving to the next account...", {
+        u8"Bu hesap için mağaza dolu. Bir sonraki hesaba geçiyoruz...",
+        u8"Shop is full for this account. Pasando a la siguiente cuenta...",
+        u8"A loja está cheia para esta conta. Passando para a próxima conta...",
+        u8"Магазин для этого аккаунта переполнен. Переходим к следующему аккаунту...",
+        u8"Der Shop für dieses Konto ist voll. Zum nächsten Konto wechseln...",
+        u8"La boutique est pleine pour ce compte. Passer au compte suivant...",
+        u8"Il negozio è pieno per questo account. Passando all'account successivo...",
+        u8"Sklep dla tego konta jest pełny. Przechodzę do następnego konta...",
+        u8"Winkel is vol voor dit account. Naar het volgende account gaan...",
+    } },
+    { u8"Waiting for growth (", {
+        u8"Büyüme bekleniyor (",
+        u8"Esperando crecimiento (",
+        u8"Aguardando crescimento (",
+        u8"Ждем роста (",
+        u8"Warten auf Wachstum (",
+        u8"En attente de croissance (",
+        u8"In attesa di crescita (",
+        u8"Oczekiwanie na wzrost (",
+        u8"Wachten op groei (",
+    } },
+    { u8"s)...", {
+        u8"s)...",
+        u8"s)...",
+        u8"s)...",
+        u8"с)...",
+        u8"s)...",
+        u8"s)...",
+        u8"s)...",
+        u8"s)...",
+        u8"s)...",
+    } },
+    { u8"Waiting Slot ", {
+        u8"Bekleme Yuvası ",
+        u8"Ranura de espera ",
+        u8"Espaço de espera ",
+        u8"Слот ожидания ",
+        u8"Warteplatz ",
+        u8"Emplacement d'attente ",
+        u8"Slot di attesa ",
+        u8"Miejsce oczekiwania ",
+        u8"Wachtslot ",
+    } },
+    { u8"Loading Slot ", {
+        u8"Yükleme Yuvası ",
+        u8"Ranura de carga ",
+        u8"Slot de carregamento ",
+        u8"Загрузочный слот ",
+        u8"Ladeschlitz ",
+        u8"Emplacement de chargement ",
+        u8"Slot di caricamento ",
+        u8"Szczelina ładowania ",
+        u8"Laadsleuf ",
+    } },
+    { u8"Waiting ", {
+        u8"Bekleniyor ",
+        u8"Esperando ",
+        u8"Waiting ",
+        u8"Ожидание ",
+        u8"Warten ",
+        u8"En attente ",
+        u8"In attesa ",
+        u8"Czekam ",
+        u8"Wachten ",
+    } },
+    { u8"s for game logic...", {
+        u8"oyun mantığı için...",
+        u8"s para la lógica del juego...",
+        u8"s para lógica de jogo...",
+        u8"для игровой логики...",
+        u8"s für Spiellogik...",
+        u8"s pour la logique du jeu...",
+        u8"s per la logica del gioco...",
+        u8"s dla logiki gry...",
+        u8"s voor spellogica...",
+    } },
+    { u8"Loading Game... ", {
+        u8"Oyun Yükleniyor... ",
+        u8"Cargando juego... ",
+        u8"Carregando jogo... ",
+        u8"Загрузка игры... ",
+        u8"Spiel wird geladen... ",
+        u8"Chargement du jeu... ",
+        u8"Caricamento del gioco... ",
+        u8"Ładowanie gry... ",
+        u8"Spel laden... ",
+    } },
+    { u8"Game Ready.", {
+        u8"Oyun Hazır.",
+        u8"Juego Listo.",
+        u8"Jogo Pronto.",
+        u8"Игра готова.",
+        u8"Spiel bereit.",
+        u8"Prêt pour le jeu.",
+        u8"Gioco pronto.",
+        u8"Gra gotowa.",
+        u8"Game klaar.",
+    } },
+    { u8"Single Account Mode Active.", {
+        u8"Tek Hesap Modu Aktif.",
+        u8"Modo de Cuenta Única Activo.",
+        u8"Modo de Conta Única Ativo.",
+        u8"Активен режим одного аккаунта.",
+        u8"Einzelkonto-Modus aktiv.",
+        u8"Mode compte unique actif.",
+        u8"Modalità account singolo attiva.",
+        u8"Tryb pojedynczego konta aktywny.",
+        u8"Modus voor één account actief.",
+    } },
+    { u8"Single mode auto-detected. Skipping game restart.", {
+        u8"Tek hesap modu otomatik algılandı. Oyun yeniden başlatması atlanıyor.",
+        u8"Modo único detectado automáticamente. Omitiendo reinicio del juego.",
+        u8"Modo único detectado automaticamente. Pulando reinício do jogo.",
+        u8"Автоматически обнаружен одиночный режим. Пропуск перезапуска игры.",
+        u8"Einzelmodus automatisch erkannt. Spielneustart wird übersprungen.",
+        u8"Mode unique détecté automatiquement. Sauter le redémarrage du jeu.",
+        u8"Modalità singola rilevata automaticamente. Salto il riavvio del gioco.",
+        u8"Automatycznie wykryto tryb pojedynczy. Pomijanie ponownego uruchomienia gry.",
+        u8"Enkelvoudige modus automatisch gedetecteerd. Herstart van het spel overslaan.",
+    } },
+    { u8"Checking Game Load...", {
+        u8"Oyunun Yüklenmesi Bekleniyor...",
+        u8"Comprobando Carga del Juego...",
+        u8"Verificando Carregamento do Jogo...",
+        u8"Проверка загрузки игры...",
+        u8"Überprüfe Spielladung...",
+        u8"Vérification du chargement du jeu...",
+        u8"Verifica del caricamento del gioco in corso...",
+        u8"Sprawdzanie ładowania gry...",
+        u8"Game laden controleren...",
+    } },
+    { u8"Single-account mode. Starting immediately...", {
+        u8"Tek hesap modu. Hemen başlıyoruz...",
+        u8"Modo de cuenta única. Empezando de inmediato...",
+        u8"Modo de conta única. Starting immediately...",
+        u8"Режим одной учетной записи. Начинаем немедленно...",
+        u8"Einzelkontomodus. Ab sofort...",
+        u8"Mode compte unique. À partir immédiatement...",
+        u8"Modalità account singolo. A partire da subito...",
+        u8"Tryb jednego konta. Rozpoczęcie natychmiast...",
+        u8"Modus voor één account. Per direct starten...",
+    } },
+    { u8"Game Loaded! Mailbox found.", {
+        u8"Oyun Yüklendi! Posta kutusu bulundu.",
+        u8"¡Juego Cargado! Buzón encontrado.",
+        u8"Jogo Carregado! Caixa de correio encontrada.",
+        u8"Игра загружена! Почтовый ящик найден.",
+        u8"Spiel geladen! Briefkasten gefunden.",
+        u8"Jeu chargé ! Boîte aux lettres trouvée.",
+        u8"Gioco caricato! Casella di posta trovata.",
+        u8"Gra załadowana! Znaleziono skrzynkę pocztową.",
+        u8"Spel geladen! Postbus gevonden.",
+    } },
+    { u8"Waiting for Game... ", {
+        u8"Oyunu Bekliyorum... ",
+        u8"Esperando Juego... ",
+        u8"Aguardando jogo... ",
+        u8"Ожидание игры... ",
+        u8"Warten auf Spiel... ",
+        u8"En attente du jeu... ",
+        u8"In attesa del gioco... ",
+        u8"Oczekiwanie na grę... ",
+        u8"Wachten op spel... ",
+    } },
+    { u8"Timeout (Mailbox not found). Skipping account.", {
+        u8"Zaman Aşımı (Posta kutusu bulunamadı). Hesap atlanıyor.",
+        u8"Tiempo agotado (Buzón no encontrado). Omitiendo cuenta.",
+        u8"Tempo Esgotado (Caixa de correio não encontrada). Pulando conta.",
+        u8"Тайм-аут (почтовый ящик не найден). Пропуск аккаунта.",
+        u8"Zeitüberschreitung (Briefkasten nicht gefunden). Konto wird übersprungen.",
+        u8"Délai d'expiration (boîte aux lettres introuvable). Compte ignoré.",
+        u8"Timeout (casella di posta non trovata). Salto del conto.",
+        u8"Przekroczono limit czasu (nie znaleziono skrzynki pocztowej). Pomijam konto.",
+        u8"Time-out (mailbox niet gevonden). Account overslaan.",
+    } },
+    { u8"Extracting Profile Data...", {
+        u8"Profil Verileri Çıkarılıyor...",
+        u8"Extrayendo Datos de Perfil...",
+        u8"Extraindo Dados do Perfil...",
+        u8"Извлечение данных профиля...",
+        u8"Profildaten extrahieren...",
+        u8"Extraction des données de profil...",
+        u8"Estrazione dei dati del profilo in corso...",
+        u8"Wyodrębnianie danych profilu...",
+        u8"Profielgegevens extraheren...",
+    } },
+    { u8"Reading Account Profile Data...", {
+        u8"Hesap Profil Verileri Okunuyor...",
+        u8"Leyendo Datos del Perfil de Cuenta...",
+        u8"Lendo Dados do Perfil da Conta...",
+        u8"Чтение данных профиля аккаунта...",
+        u8"Lese Konto-Profildaten...",
+        u8"Lecture des données de profil de compte...",
+        u8"Lettura dei dati del profilo account...",
+        u8"Czytanie danych profilu konta...",
+        u8"Accountprofielgegevens lezen...",
+    } },
+    { u8"Profile screen did not load correctly. Player tag was skipped.", {
+        u8"Profil ekranı doğru şekilde yüklenmedi. Oyuncu etiketi atlandı.",
+        u8"La pantalla de perfil no se cargó correctamente. Se omitió la etiqueta de jugador.",
+        u8"A tela do perfil não foi carregada corretamente. Player tag was skipped.",
+        u8"Экран профиля загружался неправильно. Тег игрока пропущен.",
+        u8"Der Profilbildschirm wurde nicht korrekt geladen. Spielertag wurde übersprungen.",
+        u8"L'écran de profil ne s'est pas chargé correctement. Le tag du joueur a été ignoré.",
+        u8"La schermata del profilo non è stata caricata correttamente. Il tag del giocatore è stato saltato.",
+        u8"Ekran profilu nie załadował się poprawnie. Tag gracza został pominięty.",
+        u8"Het profielscherm is niet correct geladen. Spelertag is overgeslagen.",
+    } },
+    { u8"Sales are paused for this account. Checking the shop...", {
+        u8"Bu hesap için satışlar duraklatıldı. Mağazayı kontrol ediyorum...",
+        u8"Las ventas están pausadas para esta cuenta. Revisando la tienda...",
+        u8"As vendas estão pausadas para esta conta. Checking the shop...",
+        u8"Продажи для этого аккаунта приостановлены. Проверяю магазин...",
+        u8"Der Verkauf für dieses Konto ist pausiert. Ich schaue mir den Shop an...",
+        u8"Les ventes sont suspendues pour ce compte. Je vérifie la boutique...",
+        u8"Le vendite sono sospese per questo account. Controllo del negozio...",
+        u8"Sprzedaż dla tego konta została wstrzymana. Sprawdzam sklep...",
+        u8"De verkoop is onderbroken voor dit account. De winkel controleren...",
+    } },
+    { u8"Advertisement is still on cooldown. Sales remain paused.", {
+        u8"Reklam hâlâ beklemede. Satışlar duraklatılmış durumda.",
+        u8"El anuncio aún está en tiempo de reutilización. Las ventas siguen pausadas.",
+        u8"O anúncio ainda está em espera. Sales remain paused.",
+        u8"Реклама все еще находится на стадии восстановления. Продажи остаются на паузе.",
+        u8"Die Werbung befindet sich noch in der Abklingzeit. Der Verkauf bleibt pausiert.",
+        u8"La publicité est toujours en temps de recharge. Les ventes restent suspendues.",
+        u8"La pubblicità è ancora in fase di recupero. Le vendite restano sospese.",
+        u8"Reklama wciąż się odnawia. Sprzedaż pozostaje wstrzymana.",
+        u8"De advertentie is nog in de cooldownfase. De verkoop blijft onderbroken.",
+    } },
+    { u8"Advertisement is available. Resuming normal operation.", {
+        u8"Reklam mevcut. Normal çalışmaya devam ediliyor.",
+        u8"Anuncio disponible. Reanudando el funcionamiento normal.",
+        u8"Anúncio está disponível. Retomando a operação normal.",
+        u8"Доступна реклама. Возобновление нормальной работы.",
+        u8"Werbung ist verfügbar. Wiederaufnahme des Normalbetriebs.",
+        u8"La publicité est disponible. Reprise du fonctionnement normal.",
+        u8"La pubblicità è disponibile. Ripresa del normale funzionamento.",
+        u8"Reklama jest dostępna. Wznawianie normalnej pracy.",
+        u8"Advertentie is beschikbaar. Hervatting van de normale werking.",
+    } },
+    { u8"Scanning for Grown Crops...", {
+        u8"Büyümüş Ekinler Taranıyor...",
+        u8"Escaneando Cultivos Maduros...",
+        u8"Escaneando Culturas Maduras...",
+        u8"Сканирование выросших культур...",
+        u8"Scanne nach ausgewachsenen Pflanzen...",
+        u8"Recherche de cultures cultivées...",
+        u8"Scansione delle colture coltivate...",
+        u8"Skanowanie w poszukiwaniu uprawianych roślin...",
+        u8"Scannen op volwassen gewassen...",
+    } },
+    { u8"Grown crops detected via Color! Opening sickle menu...", {
+        u8"Büyümüş ekinler Renk ile tespit edildi! Tırpan menüsü açılıyor...",
+        u8"¡Cultivos maduros detectados por color! Abriendo menú de la hoz...",
+        u8"Culturas maduras detectadas por Cor! Abrindo menu da foice...",
+        u8"Выросшие культуры обнаружены по цвету! Открытие меню серпа...",
+        u8"Ausgewachsene Pflanzen durch Farbe erkannt! Öffne Sichel-Menü...",
+        u8"Cultures détectées via Color ! Ouverture du menu faucille...",
+        u8"Colture coltivate rilevate tramite Colore! Apertura del menu falce...",
+        u8"Uprawy wykryte za pomocą funkcji Color! Otwieranie menu sierpowego...",
+        u8"Volwassen gewassen gedetecteerd via Kleur! Sikkelmenu openen...",
+    } },
+    { u8"Sickle Found! Calculating harvest zone...", {
+        u8"Tırpan Bulundu! Hasat bölgesi hesaplanıyor...",
+        u8"¡Hoz Encontrada! Calculando zona de cosecha...",
+        u8"Foice Encontrada! Calculando zona de colheita...",
+        u8"Серп найден! Вычисление зоны сбора урожая...",
+        u8"Sichel gefunden! Berechne Erntezone...",
+        u8"Faucille trouvée ! Calcul de la zone de récolte...",
+        u8"Falce trovata! Calcolo della zona di raccolta...",
+        u8"Znaleziono sierp! Obliczanie strefy zbiorów...",
+        u8"Sikkel gevonden! Oogstzone berekenen...",
+    } },
+    { u8"Silo is full. Harvest paused.", {
+        u8"Silo dolu. Hasat duraklatıldı.",
+        u8"El silo está lleno. Cosecha pausada.",
+        u8"Silo cheio. Colheita pausada.",
+        u8"Силос полон. Сбор урожая приостановлен.",
+        u8"Silo ist voll. Ernte pausiert.",
+        u8"Le silo est plein. Récolte suspendue.",
+        u8"Il silo è pieno. Raccolta in pausa.",
+        u8"Silos jest pełny. Zbiór wstrzymany.",
+        u8"Silo is vol. Oogst gepauzeerd.",
+    } },
+    { u8"Tom contract expired! Auto Tom disabled.", {
+        u8"Tom kontratı sona erdi! Otomatik Tom devre dışı bırakıldı.",
+        u8"¡Contrato de Tom expirado! Auto Tom desactivado.",
+        u8"Contrato do Tom expirou! Auto Tom desativado.",
+        u8"Контракт Тома истек! Авто-Том отключен.",
+        u8"Tom-Vertrag abgelaufen! Auto Tom deaktiviert.",
+        u8"Le contrat de Tom a expiré ! Tom automatique désactivé.",
+        u8"Il contratto di Tom è scaduto! Tom automatico disabilitato.",
+        u8"Umowa z Tomem wygasła! Automatyczny Tom wyłączony.",
+        u8"Tomcontract verlopen! Automatische Tom uitgeschakeld.",
+    } },
+    { u8"Deploying Auto Tom...", {
+        u8"Otomatik Tom Gönderiliyor...",
+        u8"Desplegando Auto Tom...",
+        u8"Enviando Auto Tom...",
+        u8"Развертывание Авто-Тома...",
+        u8"Auto Tom wird entsendet...",
+        u8"Déploiement de Tom automatique...",
+        u8"Distribuzione di Auto Tom...",
+        u8"Wdrażanie automatycznego Tom...",
+        u8"Auto Tom implementeren...",
+    } },
+    { u8"Initiating Auto Tom sequence...", {
+        u8"Otomatik Tom sekansı başlatılıyor...",
+        u8"Iniciando secuencia de Auto Tom...",
+        u8"Iniciando sequência do Auto Tom...",
+        u8"Запуск последовательности Авто-Тома...",
+        u8"Initiiere Auto Tom-Sequenz...",
+        u8"Lancement de la séquence Auto Tom...",
+        u8"Avvio della sequenza Auto Tom...",
+        u8"Inicjowanie sekwencji Auto Tom...",
+        u8"Auto Tom-reeks starten...",
+    } },
+    { u8"Tom menu not found. Retrying... (", {
+        u8"Tom menüsü bulunamadı. Yeniden deneniyor... (",
+        u8"No se encontró el menú Tom. Reintentando... (",
+        u8"Menu Tom não encontrado. Retrying... (",
+        u8"Меню Тома не найдено. Повторная попытка... (",
+        u8"Tom-Menü nicht gefunden. Erneuter Versuch... (",
+        u8"Menu Tom introuvable. Nouvelle tentative... (",
+        u8"Menu Tom non trovato. Nuovo tentativo... (",
+        u8"Nie znaleziono menu Tom. Ponawiam próbę... (",
+        u8"Tom-menu niet gevonden. Opnieuw proberen... (",
+    } },
+    { u8"Tom menu failed to open after 3 retries! Aborting sequence.", {
+        u8"Tom menüsü 3 denemeden sonra açılamadı! Sekans iptal ediliyor.",
+        u8"¡El menú de Tom no se pudo abrir después de 3 intentos! Abortando secuencia.",
+        u8"Menu do Tom falhou ao abrir após 3 tentativas! Abortando sequência.",
+        u8"Меню Тома не удалось открыть после 3 попыток! Прерывание последовательности.",
+        u8"Tom-Menü konnte nach 3 Versuchen nicht geöffnet werden! Sequenz abgebrochen.",
+        u8"Le menu Tom n'a pas pu s'ouvrir après 3 tentatives ! Séquence interrompue.",
+        u8"Impossibile aprire il menu Tom dopo 3 tentativi! Sequenza interrotta.",
+        u8"Menu Tom nie otworzyło się po 3 próbach! Przerywanie sekwencji.",
+        u8"Tom-menu kan na 3 pogingen niet worden geopend! Afbrekende reeks.",
+    } },
+    { u8"Closing stuck menu before returning to farm...", {
+        u8"Çiftliğe dönmeden önce takılan menü kapatılıyor...",
+        u8"Cerrando menú atascado antes de volver a la granja...",
+        u8"Fechando menu travado antes de retornar à fazenda...",
+        u8"Закрытие зависшего меню перед возвращением на ферму...",
+        u8"Schließe feststeckendes Menü vor der Rückkehr zur Farm...",
+        u8"Fermeture du menu bloqué avant de revenir à la ferme...",
+        u8"Chiusura del menu bloccato prima di tornare alla fattoria...",
+        u8"Zamykanie zablokowanego menu przed powrotem do farmy...",
+        u8"Vastgelopen menu sluiten voordat je terugkeert naar de boerderij...",
+    } },
+    { u8"Focusing on search text box...", {
+        u8"Arama metin kutusuna odaklanılıyor...",
+        u8"Enfocándose en el cuadro de búsqueda...",
+        u8"Focando na caixa de texto de pesquisa...",
+        u8"Фокусировка на текстовом поле поиска...",
+        u8"Fokussiere auf das Suchtextfeld...",
+        u8"Focus sur la zone de texte de recherche...",
+        u8"Focus sulla casella di testo di ricerca...",
+        u8"Koncentruję się na polu tekstowym wyszukiwania...",
+        u8"Focussen op zoektekstvak...",
+    } },
+    { u8"Tom deployed. Waiting 30s for him to return...", {
+        u8"Tom gönderildi. Dönmesi için 30sn bekleniyor...",
+        u8"Tom desplegado. Esperando 30s para que regrese...",
+        u8"Tom enviado. Esperando 30s para ele retornar...",
+        u8"Том отправлен. Ожидание 30 сек. до его возвращения...",
+        u8"Tom entsendet. Warte 30s auf seine Rückkehr...",
+        u8"Tom déployé. J'attends 30 secondes qu'il revienne...",
+        u8"Tom si è schierato. Aspettando 30 anni per il suo ritorno...",
+        u8"Tom wdrożony. Czekanie 30 sekund na jego powrót...",
+        u8"Tom ingezet. Jaren dertig wachten tot hij terugkomt...",
+    } },
+    { u8"Tom returning... ", {
+        u8"Tom geri dönüyor... ",
+        u8"Tom regresando... ",
+        u8"Tom retornando... ",
+        u8"Том возвращается... ",
+        u8"Tom kehrt zurück... ",
+        u8"Tom revient... ",
+        u8"Tom ritorna... ",
+        u8"Powrót Tomka... ",
+        u8"Tom komt terug... ",
+    } },
+    { u8"Tom is back! Clicking saved Crate location...", {
+        u8"Tom döndü! Kaydedilen Kasa konumuna tıklanıyor...",
+        u8"¡Tom ha vuelto! Haciendo clic en la ubicación guardada de la Caja...",
+        u8"Tom voltou! Clicando na localização salva da Caixa...",
+        u8"Том вернулся! Нажатие на сохраненное местоположение ящика...",
+        u8"Tom ist zurück! Klicke auf gespeicherten Kistenort...",
+        u8"Tom est de retour ! En cliquant sur l'emplacement de la caisse enregistré...",
+        u8"Tom è tornato! Facendo clic su Posizione cassa salvata...",
+        u8"Tom powrócił! Klikanie zapisanej lokalizacji skrzynek...",
+        u8"Tom is terug! Klikken op opgeslagen kratlocatie...",
+    } },
+    { u8"Opening Tom Boxes...", {
+        u8"Tom Kutuları Açılıyor...",
+        u8"Abriendo Cajas de Tom...",
+        u8"Abrindo Caixas do Tom...",
+        u8"Открытие коробок Тома...",
+        u8"Öffne Tom-Boxen...",
+        u8"Ouverture des boîtes Tom...",
+        u8"Apertura delle scatole Tom...",
+        u8"Otwieranie pudełek Tomka...",
+        u8"Tomboxen openen...",
+    } },
+    { u8"Saved location missing, searching crate again...", {
+        u8"Kayıtlı konum eksik, kasa tekrar aranıyor...",
+        u8"Falta la ubicación guardada, buscando la caja de nuevo...",
+        u8"Localização salva ausente, procurando caixa novamente...",
+        u8"Сохраненное местоположение отсутствует, повторный поиск ящика...",
+        u8"Gespeicherter Ort fehlt, suche Kiste erneut...",
+        u8"Emplacement enregistré manquant, recherche à nouveau de la caisse...",
+        u8"Posizione salvata mancante, ricerca di nuovo nella cassa...",
+        u8"Brak zapisanej lokalizacji, ponowne przeszukiwanie skrzynki...",
+        u8"Opgeslagen locatie ontbreekt, krat opnieuw doorzocht...",
+    } },
+    { u8"Not enough coins for Max Stack! Falling back to Mid...", {
+        u8"Maksimum yığın için yeterli altın yok! Ortaya düşülüyor...",
+        u8"¡No hay suficientes monedas para la Pila Máxima! Volviendo a la Media...",
+        u8"Moedas insuficientes para Pilha Máxima! Voltando para Média...",
+        u8"Недостаточно монет для максимальной стопки! Переход к средней...",
+        u8"Nicht genug Münzen für Max-Stapel! Falle auf Mitte zurück...",
+        u8"Pas assez de pièces pour Max Stack ! Revenir au milieu...",
+        u8"Monete insufficienti per Max Stack! Ritornando a metà...",
+        u8"Za mało monet dla maksymalnego stosu! Wracając do połowy...",
+        u8"Niet genoeg munten voor Max Stack! Terugvallend naar Midden...",
+    } },
+    { u8"Still poor! Falling back to Min Stack...", {
+        u8"Hala fakiriz! Minimum yığına düşülüyor...",
+        u8"¡Todavía pobre! Volviendo a la Pila Mínima...",
+        u8"Ainda pobre! Voltando para Pilha Mínima...",
+        u8"Все еще мало монет! Возврат к минимальной стопке...",
+        u8"Immer noch arm! Falle auf Minimalstapel zurück...",
+        u8"Toujours pauvre ! Revenir à Min Stack...",
+        u8"Ancora povero! Ritornando allo Stack Min...",
+        u8"Nadal słabo! Wracając do Min Stack...",
+        u8"Nog steeds arm! Terugvallen op Min Stack...",
+    } },
+    { u8"Purchase confirmed! Waiting 30s for Tom to deliver...", {
+        u8"Satın alma onaylandı! Tom'un teslimatı için 30sn bekleniyor...",
+        u8"¡Compra confirmada! Esperando 30s para que Tom entregue...",
+        u8"Compra confirmada! Esperando 30s para o Tom entregar...",
+        u8"Покупка подтверждена! Ожидание 30 сек. доставки Тома...",
+        u8"Kauf bestätigt! Warte 30s auf Toms Lieferung...",
+        u8"Achat confirmé ! J'attends 30 secondes que Tom livre...",
+        u8"Acquisto confermato! Aspettando 30 secondi per la consegna di Tom...",
+        u8"Zakup potwierdzony! Czekam 30 sekund, aż Tom dostarczy...",
+        u8"Aankoop bevestigd! Jaren dertig wachten tot Tom bevalt...",
+    } },
+    { u8"Tom delivering... ", {
+        u8"Tom teslim ediyor... ",
+        u8"Tom entregando... ",
+        u8"Tom entregando... ",
+        u8"Том доставляет... ",
+        u8"Tom liefert... ",
+        u8"Tom livrant... ",
+        u8"Tom consegna... ",
+        u8"Tom dostarcza... ",
+        u8"Tom levert... ",
+    } },
+    { u8"Tom delivered! Collecting items...", {
+        u8"Tom teslim etti! Eşyalar toplanıyor...",
+        u8"¡Tom entregó! Recolectando artículos...",
+        u8"Tom entregou! Coletando itens...",
+        u8"Том доставил! Сбор предметов...",
+        u8"Tom hat geliefert! Gegenstände sammeln...",
+        u8"Tom livré ! Collecter des objets...",
+        u8"Tom ha consegnato! Raccolta oggetti...",
+        u8"Tom dostarczył! Zbieranie przedmiotów...",
+        u8"Tom afgeleverd! Artikelen verzamelen...",
+    } },
+    { u8"Collecting Items...", {
+        u8"Eşyalar Toplanıyor...",
+        u8"Recolectando Artículos...",
+        u8"Coletando Itens...",
+        u8"Сбор предметов...",
+        u8"Gegenstände sammeln...",
+        u8"Collecte d'objets...",
+        u8"Raccolta di oggetti...",
+        u8"Zbieranie przedmiotów...",
+        u8"Voorwerpen verzamelen...",
+    } },
+    { u8"Saved location missing, searching crate to collect...", {
+        u8"Kayıtlı konum eksik, toplamak için kasa aranıyor...",
+        u8"Falta la ubicación guardada, buscando la caja para recolectar...",
+        u8"Localização salva ausente, procurando caixa para coletar...",
+        u8"Сохраненное местоположение отсутствует, поиск ящика для сбора...",
+        u8"Gespeicherter Ort fehlt, suche Kiste zum Einsammeln...",
+        u8"Emplacement enregistré manquant, recherche de caisse à récupérer...",
+        u8"Posizione salvata mancante, ricerca nella cassa da raccogliere...",
+        u8"Brak zapisanej lokalizacji, poszukiwanie skrzynki do zebrania...",
+        u8"Opgeslagen locatie ontbreekt, krat gezocht om op te halen...",
+    } },
+    { u8"Auto Tom cycle complete! He will wake up in 2 hours.", {
+        u8"Otomatik Tom döngüsü tamamlandı! 2 saat içinde uyanacak.",
+        u8"¡Ciclo de Auto Tom completado! Se despertará en 2 horas.",
+        u8"Ciclo do Auto Tom concluído! Ele acordará em 2 horas.",
+        u8"Цикл Авто-Тома завершен! Он проснется через 2 часа.",
+        u8"Auto Tom-Zyklus abgeschlossen! Er wacht in 2 Stunden auf.",
+        u8"Cycle Auto Tom terminé ! Il se réveillera dans 2 heures.",
+        u8"Ciclo Auto Tom completato! Si sveglierà tra 2 ore.",
+        u8"Cykl Auto Tom zakończony! Obudzi się za 2 godziny.",
+        u8"Auto Tom-cyclus voltooid! Hij wordt over 2 uur wakker.",
+    } },
+    { u8"Checking Auto Tom...", {
+        u8"Otomatik Tom Kontrol Ediliyor...",
+        u8"Comprobando Auto Tom...",
+        u8"Verificando Auto Tom...",
+        u8"Проверка Авто-Тома...",
+        u8"Überprüfe Auto Tom...",
+        u8"Vérification du Tom automatique...",
+        u8"Controllo del Tom automatico...",
+        u8"Sprawdzanie automatycznego tomu...",
+        u8"Autotom controleren...",
+    } },
+    { u8"Account Leveled Up! Claiming rewards...", {
+        u8"Hesap Seviye Atladı! Ödüller toplanıyor...",
+        u8"¡Cuenta Subió de Nivel! Reclamando recompensas...",
+        u8"Conta Subiu de Nível! Resgatando recompensas...",
+        u8"Уровень аккаунта повышен! Получение наград...",
+        u8"Konto aufgestiegen! Belohnungen werden eingefordert...",
+        u8"Compte amélioré ! Réclamer des récompenses...",
+        u8"Account salito di livello! Richiesta premi...",
+        u8"Poziom konta wyższy! Odbieranie nagród...",
+        u8"Account is verhoogd! Beloningen claimen...",
+    } },
+    { u8"Level updated to: ", {
+        u8"Seviye şu şekilde güncellendi: ",
+        u8"Nivel actualizado a: ",
+        u8"Nível atualizado para: ",
+        u8"Уровень обновлен до: ",
+        u8"Level aktualisiert auf: ",
+        u8"Niveau mis à jour pour : ",
+        u8"Livello aggiornato a: ",
+        u8"Poziom zaktualizowany do: ",
+        u8"Niveau bijgewerkt naar: ",
+    } },
+    { u8"Scanning Fields...", {
+        u8"Tarlalar Taranıyor...",
+        u8"Escaneando Campos...",
+        u8"Escaneando Campos...",
+        u8"Сканирование полей...",
+        u8"Scanne Felder...",
+        u8"Champs d'analyse...",
+        u8"Scansione campi...",
+        u8"Skanowanie pól...",
+        u8"Velden scannen...",
+    } },
+    { u8"Fields detected. Opening the seed menu: swipe ", {
+        u8"Tarlalar algılandı. Tohum menüsü açılıyor; kaydırma ",
+        u8"Campos detectados. Abriendo el menú de semillas: desliza ",
+        u8"Campos detectados. Abrindo o menu de sementes: deslize ",
+        u8"Поля обнаружены. Открытие меню семян: проведите свайп ",
+        u8"Felder erkannt. Öffne das Saatgut-Menü: wischen ",
+        u8"Champs détectés. Ouverture du menu des semences : glisser ",
+        u8"Campi rilevati. Apertura del menu dei semi: scorri ",
+        u8"Wykryto pola. Otwieranie menu nasion: przesuń ",
+        u8"Velden gedetecteerd. Menu voor zaaien openen: veeg ",
+    } },
+    { u8"Seed found. Planting...", {
+        u8"Tohum bulundu. Ekim yapılıyor...",
+        u8"Semilla encontrada. Plantando...",
+        u8"Semente encontrada. Plantando...",
+        u8"Семена найдены. Посев...",
+        u8"Saatgut gefunden. Pflanzen...",
+        u8"Graine trouvée. Plantation...",
+        u8"Seme trovato. Piantagione in corso...",
+        u8"Nasiona znalezione. Sadzenie...",
+        u8"Zaad gevonden. Zaaien...",
+    } },
+    { u8"Out of seeds. Diamond dialog detected; skipping planting.", {
+        u8"Tohum kalmadı. Elmas penceresi algılandı; ekim atlanıyor.",
+        u8"Sin semillas. Cuadro de diálogo de diamante detectado; se omite la plantación.",
+        u8"Sem sementes. Diálogo de diamante detectado; pulando o plantio.",
+        u8"Семена закончились. Обнаружен алмазный диалог; пропуск посева.",
+        u8"Kein Saatgut mehr. Diamant-Dialog erkannt; Pflanzung überspringen.",
+        u8"Plus de graines. Dialogue du diamant détecté ; plantation ignorée.",
+        u8"Semi esauriti. Rilevata finestra di dialogo diamante; salto della piantagione.",
+        u8"Brak nasion. Wykryto okno dialogowe diamentu; pomijanie sadzenia.",
+        u8"Geen zaden meer. Diamantdialoog gedetecteerd; zaaien wordt overgeslagen.",
+    } },
+    { u8"Seed menu NOT opened or seed missing. Breaking plant loop.", {
+        u8"Tohum menüsü AÇILMADI veya tohum eksik. Ekim döngüsü kırılıyor.",
+        u8"Menú de semillas NO abierto o semilla faltante. Rompiendo el ciclo de siembra.",
+        u8"Menu de sementes NÃO aberto ou semente ausente. Interrompendo loop de plantação.",
+        u8"Меню семян НЕ открыто или семена отсутствуют. Прерывание цикла посадки.",
+        u8"Samen-Menü NICHT geöffnet oder Samen fehlt. Breche Pflanzschleife ab.",
+        u8"Le menu Seed n'est PAS ouvert ou la graine est manquante. Rompre la boucle de l’usine.",
+        u8"Menu seme NON aperto o seme mancante. Rompere il ciclo della pianta.",
+        u8"Menu nasion NIE zostało otwarte lub brakuje nasion. Przerywanie pętli roślinnej.",
+        u8"Zaadmenu NIET geopend of zaad ontbreekt. Plantenlus doorbreken.",
+    } },
+    { u8"All visible fields are planted successfully.", {
+        u8"Görünürdeki tüm tarlalar başarıyla ekildi.",
+        u8"Todos los campos visibles han sido plantados con éxito.",
+        u8"Todos os campos visíveis foram plantados com sucesso.",
+        u8"Все видимые поля успешно засеяны.",
+        u8"Alle sichtbaren Felder wurden erfolgreich bepflanzt.",
+        u8"Tous les champs visibles sont plantés avec succès.",
+        u8"Tutti i campi visibili sono stati piantati con successo.",
+        u8"Wszystkie widoczne pola zostały obsadzone pomyślnie.",
+        u8"Alle zichtbare velden zijn succesvol geplant.",
+    } },
+    { u8"Field position mapped and saved!", {
+        u8"Tarla konumu haritalandı ve kaydedildi!",
+        u8"¡Posición del campo mapeada y guardada!",
+        u8"Posição do campo mapeada e salva!",
+        u8"Позиция поля определена и сохранена!",
+        u8"Feldposition erfasst und gespeichert!",
+        u8"Position du terrain cartographiée et enregistrée !",
+        u8"Posizione sul campo mappata e salvata!",
+        u8"Pozycja pola zmapowana i zapisana!",
+        u8"Veldpositie in kaart gebracht en opgeslagen!",
+    } },
+    { u8"Checking Harvest...", {
+        u8"Hasat Kontrol Ediliyor...",
+        u8"Comprobando Cosecha...",
+        u8"Verificando Colheita...",
+        u8"Проверка урожая...",
+        u8"Überprüfe Ernte...",
+        u8"Vérification de la récolte...",
+        u8"Controllo della raccolta...",
+        u8"Sprawdzanie zbiorów...",
+        u8"Oogst controleren...",
+    } },
+    { u8"Silo is full. Planting, selling, then resuming harvest...", {
+        u8"Silo dolu. Ekim ve satıştan sonra hasada devam edilecek...",
+        u8"El silo está lleno. Plantando, vendiendo, luego reanudando la cosecha...",
+        u8"Silo cheio. Plantando, vendendo e depois retomando a colheita...",
+        u8"Силос полон. Посев, продажа, затем возобновление сбора урожая...",
+        u8"Silo ist voll. Pflanzen, verkaufen und dann Ernte fortsetzen...",
+        u8"Le silo est plein. Plantation, vente, puis reprise de la récolte...",
+        u8"Il silo è pieno. Piantagione, vendita, poi ripresa della raccolta...",
+        u8"Silos jest pełny. Sadzenie, sprzedaż, a następnie wznawianie zbiorów...",
+        u8"Silo is vol. Zaaien, verkopen, en daarna oogst hervatten...",
+    } },
+    { u8"Emergency Plant...", {
+        u8"Acil Durum Tesisi...",
+        u8"Planta de Emergencia...",
+        u8"Central de Emergência...",
+        u8"Аварийная станция...",
+        u8"Notfallanlage...",
+        u8"Centrale d'Urgence...",
+        u8"Impianto di emergenza...",
+        u8"Instalacja awaryjna...",
+        u8"Noodcentrale...",
+    } },
+    { u8"Emergency Sales...", {
+        u8"Acil Durum Satışları...",
+        u8"Ventas de Emergencia...",
+        u8"Vendas de Emergência...",
+        u8"Экстренные продажи...",
+        u8"Notverkäufe...",
+        u8"Ventes d'urgence...",
+        u8"Vendite di emergenza...",
+        u8"Sprzedaż awaryjna...",
+        u8"Noodverkoop...",
+    } },
+    { u8"Space freed. Resuming harvest after emergency actions...", {
+        u8"Yer açıldı. Acil durum müdahalelerinin ardından hasada devam ediliyor...",
+        u8"Espacio liberado. Reanudando cosecha tras acciones de emergencia...",
+        u8"Espaço liberado. Retomando a colheita após ações emergenciais...",
+        u8"Место освобождено. Возобновление сбора урожая после экстренных мероприятий...",
+        u8"Speicherplatz freigegeben. Wiederaufnahme der Ernte nach Notmaßnahmen...",
+        u8"Espace libéré. Reprise des récoltes après les actions d'urgence...",
+        u8"Spazio liberato. Ripresa della raccolta dopo gli interventi di emergenza...",
+        u8"Zwolniono miejsce. Wznawianie żniw po działaniach awaryjnych...",
+        u8"Ruimte vrijgemaakt. Hervatting van de oogst na noodmaatregelen...",
+    } },
+    { u8"Resuming Harvest...", {
+        u8"Hasada Devam Ediliyor...",
+        u8"Reanudando Cosecha...",
+        u8"Retomando Colheita...",
+        u8"Возобновление сбора урожая...",
+        u8"Ernte fortsetzen...",
+        u8"Reprise de la récolte...",
+        u8"Ripresa della raccolta...",
+        u8"Wznawianie żniw...",
+        u8"Oogst hervatten...",
+    } },
+    { u8"Checking Plant...", {
+        u8"Ekim Kontrol Ediliyor...",
+        u8"Comprobando Siembra...",
+        u8"Verificando Plantação...",
+        u8"Проверка посадок...",
+        u8"Überprüfe Bepflanzung...",
+        u8"Vérification de l'usine...",
+        u8"Controllo impianto...",
+        u8"Sprawdzanie instalacji...",
+        u8"Installatie controleren...",
+    } },
+    { u8"Plant incomplete or failed. Suspecting false positive or stuck menu. Retrying...", {
+        u8"Ekim tamamlanmadı veya başarısız oldu. Yanlış algılama veya takılı menüden şüpheleniliyor. Tekrar deneniyor...",
+        u8"Siembra incompleta o fallida. Sospechando falso positivo o menú atascado. Reintentando...",
+        u8"Plantação incompleta ou falhou. Suspeita de falso positivo ou menu travado. Tentando novamente...",
+        u8"Посадка не завершена или не удалась. Подозревается ложное срабатывание или зависшее меню. Повтор...",
+        u8"Bepflanzung unvollständig oder fehlgeschlagen. Vermute falschen Alarm oder blockiertes Menü. Erneuter Versuch...",
+        u8"Installation incomplète ou en panne. Suspect d'un faux positif ou d'un menu bloqué. Nouvelle tentative...",
+        u8"Impianto incompleto o guasto. Sospetto di falsi positivi o di menu bloccato. Nuovo tentativo...",
+        u8"Instalacja niekompletna lub uszkodzona. Podejrzewam, że menu jest fałszywe lub zablokowane. Ponawiam próbę...",
+        u8"Installatie onvolledig of mislukt. Vermoedelijk vals-positief of vastgelopen menu. Opnieuw proberen...",
+    } },
+    { u8"Retrying Harvest...", {
+        u8"Hasat Tekrar Deneniyor...",
+        u8"Reintentando Cosecha...",
+        u8"Tentando Novamente a Colheita...",
+        u8"Повторная попытка сбора урожая...",
+        u8"Ernte wird erneut versucht...",
+        u8"Nouvelle tentative de récolte...",
+        u8"Nuovo tentativo di raccolta...",
+        u8"Ponawianie próby zbioru...",
+        u8"Oogst opnieuw proberen...",
+    } },
+    { u8"Retrying Plant...", {
+        u8"Ekim Tekrar Deneniyor...",
+        u8"Reintentando Siembra...",
+        u8"Tentando Novamente a Plantação...",
+        u8"Повторная попытка посадки...",
+        u8"Bepflanzung wird erneut versucht...",
+        u8"Nouvelle tentative de l'usine...",
+        u8"Nuovo tentativo di impianto...",
+        u8"Ponawianie próby instalacji...",
+        u8"Installatie opnieuw proberen...",
+    } },
+    { u8"All retries failed. Moving on.", {
+        u8"Tüm denemeler başarısız oldu. Devam ediliyor.",
+        u8"Todos los intentos fallaron. Continuando.",
+        u8"Todas as tentativas falharam. Continuando.",
+        u8"Все попытки не удались. Продолжение.",
+        u8"Alle Versuche fehlgeschlagen. Weiter geht's.",
+        u8"Toutes les tentatives ont échoué. Passons à autre chose.",
+        u8"Tutti i tentativi non sono riusciti. Andiamo avanti.",
+        u8"Wszystkie ponowne próby nie powiodły się. Idziemy dalej.",
+        u8"Alle nieuwe pogingen zijn mislukt. Verder gaan.",
+    } },
+    { u8"Random sale cycle started: ", {
+        u8"Rastgele satış döngüsü başladı: ",
+        u8"Ciclo de venta aleatorio iniciado: ",
+        u8"Ciclo de venda aleatório iniciado: ",
+        u8"Начат случайный цикл продаж: ",
+        u8"Zufälliger Verkaufszyklus gestartet: ",
+        u8"Cycle de vente aléatoire démarré : ",
+        u8"Ciclo di vendita casuale iniziato: ",
+        u8"Rozpoczęto losowy cykl sprzedaży: ",
+        u8"Willekeurige verkoopcyclus gestart: ",
+    } },
+    { u8"Checking Sales...", {
+        u8"Satışlar Kontrol Ediliyor...",
+        u8"Comprobando Ventas...",
+        u8"Verificando Vendas...",
+        u8"Проверка продаж...",
+        u8"Überprüfe Verkäufe...",
+        u8"Vérification des ventes...",
+        u8"Verifica delle vendite...",
+        u8"Sprawdzanie sprzedaży...",
+        u8"Verkoop controleren...",
+    } },
+    { u8"Skipping this sale cycle: ", {
+        u8"Bu satış döngüsü atlanıyor: ",
+        u8"Omitiendo este ciclo de venta: ",
+        u8"Pulando este ciclo de venda: ",
+        u8"Пропуск этого цикла продаж: ",
+        u8"Diesen Verkaufszyklus überspringen: ",
+        u8"Passage de ce cycle de vente : ",
+        u8"Salto di questo ciclo di vendita: ",
+        u8"Pomijanie tego cyklu sprzedaży: ",
+        u8"Deze verkoopcyclus wordt overgeslagen: ",
+    } },
+    { u8"Skipped Sales (Random)", {
+        u8"Satışlar Atlandı (Rastgele)",
+        u8"Ventas Omitidas (Aleatorio)",
+        u8"Vendas Puladas (Aleatório)",
+        u8"Пропущенные продажи (Случайно)",
+        u8"Verkäufe übersprungen (Zufällig)",
+        u8"Ventes ignorées (aléatoire)",
+        u8"Vendite saltate (casuali)",
+        u8"Pominięta sprzedaż (losowa)",
+        u8"Overgeslagen verkopen (willekeurig)",
+    } },
+    { u8"Account Cycle Done. Moving to next...", {
+        u8"Hesap Döngüsü Tamamlandı. Sıradakine geçiliyor...",
+        u8"Ciclo de Cuenta Terminado. Pasando a la siguiente...",
+        u8"Ciclo de Conta Concluído. Passando para a próxima...",
+        u8"Цикл аккаунта завершен. Переход к следующему...",
+        u8"Konto-Zyklus abgeschlossen. Weiter zum nächsten...",
+        u8"Cycle de compte terminé. Passons au suivant...",
+        u8"Ciclo account completato. Passando al prossimo...",
+        u8"Cykl konta zakończony. Przechodzę do następnego...",
+        u8"Accountcyclus voltooid. Verhuizen naar de volgende...",
+    } },
+    { u8"MAINTENANCE: PAUSING BOT...", {
+        u8"BAKIM: BOT DURAKLATILIYOR...",
+        u8"MANTENIMIENTO: PAUSAR BOT...",
+        u8"MANUTENÇÃO: PAUSANDO BOT...",
+        u8"ОБСЛУЖИВАНИЕ: ПАУЗА BOT...",
+        u8"WARTUNG: PAUSIERT BOT...",
+        u8"ENTRETIEN : PAUSE BOT...",
+        u8"MANUTENZIONE: PAUSA BOT...",
+        u8"KONSERWACJA: WSTRZYMANIE BOT...",
+        u8"ONDERHOUD: PAUZEREN BOT...",
+    } },
+    { u8"Maintenance interval reached after ", {
+        u8"Bakım aralığına şu süreden sonra ulaşıldı: ",
+        u8"Intervalo de mantenimiento alcanzado después ",
+        u8"Intervalo de manutenção atingido após ",
+        u8"Интервал технического обслуживания достигнут после ",
+        u8"Wartungsintervall erreicht nach ",
+        u8"Intervalle de maintenance atteint après ",
+        u8"Intervallo di manutenzione raggiunto dopo ",
+        u8"Osiągnięto interwał konserwacji po ",
+        u8"Onderhoudsinterval bereikt na ",
+    } },
+    { u8" cycles. Pausing the bot...", {
+        u8" döngüleri. Bot duraklatılıyor...",
+        u8" ciclos. Pausando el bot...",
+        u8" cycles. Pausing the bot...",
+        u8" циклов. Приостановка работы бота...",
+        u8" Zyklen. Pausieren des bot...",
+        u8" cycles. Mise en pause du bot...",
+        u8" cicli. Messa in pausa di bot...",
+        u8" cykli. Wstrzymywanie bot...",
+        u8" cycli. De bot pauzeren...",
+    } },
+    { u8"Restarting the emulator to release memory...", {
+        u8"Belleği serbest bırakmak için öykünücü yeniden başlatılıyor...",
+        u8"Reiniciando el emulador para liberar memoria...",
+        u8"Reiniciando o emulador para liberar memória...",
+        u8"Перезапуск эмулятора для освобождения памяти...",
+        u8"Der Emulator wird neu gestartet, um Speicher freizugeben ...",
+        u8"Redémarrage de l'émulateur pour libérer de la mémoire...",
+        u8"Riavvio dell'emulatore per liberare memoria...",
+        u8"Ponowne uruchamianie emulatora w celu zwolnienia pamięci...",
+        u8"De emulator opnieuw starten om geheugen vrij te maken...",
+    } },
+    { u8"MAINTENANCE: RELEASING MEMORY...", {
+        u8"BAKIM: BELLEK BOŞALTILIYOR...",
+        u8"MANTENIMIENTO: LIBERANDO MEMORIA...",
+        u8"MANUTENÇÃO: LIBERANDO MEMÓRIA...",
+        u8"ОБСЛУЖИВАНИЕ: ОСВОБОЖДЕНИЕ ПАМЯТИ...",
+        u8"WARTUNG: SPEICHER FREIGABE...",
+        u8"MAINTENANCE : LIBÉRATION DE LA MÉMOIRE...",
+        u8"MANUTENZIONE: RILASCIO DELLA MEMORIA...",
+        u8"KONSERWACJA: ZWOLNIENIE PAMIĘCI...",
+        u8"ONDERHOUD: GEHEUGEN VRIJGEVEN...",
+    } },
+    { u8"Starting the emulator after maintenance...", {
+        u8"Bakımdan sonra emülatör başlatılıyor...",
+        u8"Iniciando el emulador después del mantenimiento...",
+        u8"Iniciando o emulador após manutenção...",
+        u8"Запуск эмулятора после технического обслуживания...",
+        u8"Starten des Emulators nach der Wartung...",
+        u8"Démarrage de l'émulateur après maintenance...",
+        u8"Avvio dell'emulatore dopo la manutenzione...",
+        u8"Uruchamianie emulatora po konserwacji...",
+        u8"De emulator starten na onderhoud...",
+    } },
+    { u8"MAINTENANCE: STARTING EMULATOR...", {
+        u8"BAKIM: EMÜLATÖR BAŞLATILIYOR...",
+        u8"MANTENIMIENTO: INICIANDO EL EMULADOR...",
+        u8"MANUTENÇÃO: INICIANDO O EMULADOR...",
+        u8"ОБСЛУЖИВАНИЕ: ЗАПУСК ЭМУЛЯТОРА...",
+        u8"WARTUNG: EMULATOR STARTET...",
+        u8"MAINTENANCE : DÉMARRAGE DE L'ÉMULATEUR...",
+        u8"MANUTENZIONE: AVVIO DELL'EMULATORE...",
+        u8"KONSERWACJA: URUCHAMIANIE EMULATORA...",
+        u8"ONDERHOUD: EMULATOR STARTEN...",
+    } },
+    { u8"MAINTENANCE: STARTING MINITOUCH...", {
+        u8"BAKIM: MINITOUCH BAŞLATILIYOR...",
+        u8"MANTENIMIENTO: INICIANDO MINITOUCH...",
+        u8"MANUTENÇÃO: INICIANDO MINITOUCH...",
+        u8"ОБСЛУЖИВАНИЕ: ЗАПУСК MINITOUCH...",
+        u8"WARTUNG: STARTET MINITOUCH...",
+        u8"MAINTENANCE : DÉMARRAGE de MINITOUCH...",
+        u8"MANUTENZIONE: AVVIO MINITOUCH...",
+        u8"KONSERWACJA: URUCHOMIENIE MINITOUCH...",
+        u8"ONDERHOUD: STARTEN MINITOUCH...",
+    } },
+    { u8"Restarting Minitouch...", {
+        u8"Minitouch yeniden başlatılıyor...",
+        u8"Reiniciando Minitouch...",
+        u8"Reiniciando Minitouch...",
+        u8"Перезапуск Minitouch...",
+        u8"Minitouch wird neu gestartet...",
+        u8"Redémarrage de Minitouch...",
+        u8"Riavvio Minitouch...",
+        u8"Ponowne uruchamianie Minitouch...",
+        u8"Herstarten van Minitouch...",
+    } },
+    { u8"Maintenance completed. Resuming normal operation.", {
+        u8"Bakım tamamlandı. Normal çalışmaya devam ediliyor.",
+        u8"Mantenimiento completado. Reanudando el funcionamiento normal.",
+        u8"Manutenção concluída. Retomando a operação normal.",
+        u8"Техническое обслуживание завершено. Возобновление нормальной работы.",
+        u8"Wartung abgeschlossen. Wiederaufnahme des Normalbetriebs.",
+        u8"Maintenance terminée. Reprise du fonctionnement normal.",
+        u8"Manutenzione completata. Ripresa del normale funzionamento.",
+        u8"Konserwacja zakończona. Wznawianie normalnej pracy.",
+        u8"Onderhoud voltooid. Hervatting van de normale werking.",
+    } },
+    { u8"Cycles until next maintenance: ", {
+        u8"Bir sonraki bakıma kadar döngüler: ",
+        u8"Ciclos hasta el próximo mantenimiento: ",
+        u8"Ciclos até a próxima manutenção: ",
+        u8"Циклы до следующего обслуживания: ",
+        u8"Zyklen bis zur nächsten Wartung: ",
+        u8"Cycles jusqu'à la prochaine maintenance : ",
+        u8"Cicli fino alla prossima manutenzione: ",
+        u8"Cykle do następnej konserwacji: ",
+        u8"Cycli tot volgend onderhoud: ",
+    } },
+    { u8"Cycle End Cleanup...", {
+        u8"Döngü Sonu Temizliği...",
+        u8"Limpieza de Fin de Ciclo...",
+        u8"Limpeza de Fim de Ciclo...",
+        u8"Очистка в конце цикла...",
+        u8"Zyklusende-Bereinigung...",
+        u8"Nettoyage de fin de cycle...",
+        u8"Pulizia fine ciclo...",
+        u8"Końcowe czyszczenie cyklu...",
+        u8"Cycluseinde opruimen...",
+    } },
+    { u8"Performing deep system cleanup to prevent Game Not Responding Error...", {
+        u8"Oyun Yanıt Vermiyor Hatasını önlemek için derin sistem temizliği yapılıyor...",
+        u8"Realizando limpieza profunda del sistema para prevenir Error de Juego no Responde...",
+        u8"Realizando limpeza profunda do sistema para evitar Erro de Jogo Não Respondendo...",
+        u8"Выполнение глубокой очистки системы для предотвращения ошибки зависания игры...",
+        u8"Führe tiefgreifende Systembereinigung durch, um Fehler 'Spiel reagiert nicht' zu verhindern...",
+        u8"Effectuer un nettoyage en profondeur du système pour éviter l'erreur de non-réponse du jeu...",
+        u8"Esecuzione di una pulizia approfondita del sistema per evitare l'errore che il gioco non risponde...",
+        u8"Wykonuję dokładne czyszczenie systemu, aby zapobiec błędowi braku odpowiedzi gry...",
+        u8"Er wordt een grondige systeemopruiming uitgevoerd om te voorkomen dat de game niet reageert...",
+    } },
+    { u8"Cycle Done", {
+        u8"Döngü Tamamlandı",
+        u8"Ciclo Terminado",
+        u8"Ciclo Concluído",
+        u8"Цикл завершен",
+        u8"Zyklus abgeschlossen",
+        u8"Cycle terminé",
+        u8"Ciclo completato",
+        u8"Cykl zakończony",
+        u8"Cyclus voltooid",
+    } },
+    { u8"Single Account Cycle Done. Waiting for crops...", {
+        u8"Tek Hesap Döngüsü Tamamlandı. Ekinler için bekleniyor...",
+        u8"Ciclo de Cuenta Única Terminado. Esperando cultivos...",
+        u8"Ciclo de Conta Única Concluído. Esperando culturas...",
+        u8"Цикл одного аккаунта завершен. Ожидание урожая...",
+        u8"Einzelkonto-Zyklus abgeschlossen. Warte auf Pflanzen...",
+        u8"Cycle de compte unique terminé. En attendant les récoltes...",
+        u8"Ciclo conto singolo completato. In attesa dei raccolti...",
+        u8"Cykl pojedynczego konta zakończony. Czekam na plony...",
+        u8"Cyclus van één account voltooid. Wachten op de oogst...",
+    } },
+    { u8"Starting account scan...", {
+        u8"Hesap taraması başlatılıyor...",
+        u8"Iniciando escaneo de cuenta...",
+        u8"Iniciando verificação de conta...",
+        u8"Запуск сканирования учетной записи...",
+        u8"Kontoscan wird gestartet...",
+        u8"Démarrage de l'analyse du compte...",
+        u8"Avvio della scansione dell'account...",
+        u8"Rozpoczynam skanowanie konta...",
+        u8"Accountscan starten...",
+    } },
+    { u8"Friend book is already open.", {
+        u8"Arkadaş defteri zaten açık.",
+        u8"El libro de amigos ya está abierto.",
+        u8"O livro de amigos já está aberto.",
+        u8"Книга друзей уже открыта.",
+        u8"Das Freundebuch ist bereits geöffnet.",
+        u8"Le livre d'amis est déjà ouvert.",
+        u8"Il libro degli amici è già aperto.",
+        u8"Księga znajomych jest już otwarta.",
+        u8"Vriendenboek is al geopend.",
+    } },
+    { u8"Opening the in-game friends tab...", {
+        u8"Oyun içi arkadaşlar sekmesi açılıyor...",
+        u8"Abriendo la pestaña de amigos en el juego...",
+        u8"Abrindo a aba de amigos no jogo...",
+        u8"Открытие вкладки друзей в игре...",
+        u8"Öffnen des Freundes-Tabs im Spiel...",
+        u8"Ouverture de l'onglet Amis du jeu...",
+        u8"Apertura della scheda degli amici nel gioco...",
+        u8"Otwieranie zakładki znajomych w grze...",
+        u8"Het vriendentabblad in de game openen...",
+    } },
+    { u8"Scanning the friend requests tab...", {
+        u8"Arkadaşlık istekleri sekmesi taranıyor...",
+        u8"Escaneando la pestaña de solicitudes de amistad...",
+        u8"Verificando a guia de solicitações de amizade...",
+        u8"Сканирование вкладки с запросами на добавление в друзья...",
+        u8"Die Registerkarte „Freundschaftsanfragen“ wird gescannt …",
+        u8"Analyse de l'onglet Demandes d'amis...",
+        u8"Scansione della scheda delle richieste di amicizia...",
+        u8"Skanowanie karty zaproszeń do znajomych...",
+        u8"Het tabblad vriendschapsverzoeken scannen...",
+    } },
+    { u8"Searching for account: ", {
+        u8"Hesap aranıyor: ",
+        u8"Buscando cuenta: ",
+        u8"Procurando conta: ",
+        u8"Поиск аккаунта: ",
+        u8"Suche nach Konto: ",
+        u8"Recherche de compte : ",
+        u8"Ricerca dell'account: ",
+        u8"Wyszukiwanie konta: ",
+        u8"Zoeken naar account: ",
+    } },
+    { u8"Account found. Opening: ", {
+        u8"Hesap bulundu. Açılış: ",
+        u8"Cuenta encontrada. Apertura: ",
+        u8"Conta encontrada. Opening: ",
+        u8"Аккаунт найден. Открытие: ",
+        u8"Konto gefunden. Eröffnung: ",
+        u8"Compte trouvé. Ouverture : ",
+        u8"Account trovato. Apertura: ",
+        u8"Znaleziono konto. Otwarcie: ",
+        u8"Account gevonden. Opening: ",
+    } },
+    { u8"Friend request found. Looking for the accept button...", {
+        u8"Arkadaşlık isteği bulundu. Kabul et butonunu arıyorum...",
+        u8"Solicitud de amistad encontrada. Buscando el botón aceptar...",
+        u8"Solicitação de amizade encontrada. Procurando o botão aceitar...",
+        u8"Запрос на добавление в друзья найден. Ищем кнопку принять...",
+        u8"Freundschaftsanfrage gefunden. Ich suche nach der Schaltfläche „Akzeptieren“ ...",
+        u8"Demande d'ami trouvée. Vous cherchez le bouton Accepter...",
+        u8"Richiesta di amicizia trovata. Cerchi il pulsante Accetta...",
+        u8"Znaleziono zaproszenie do znajomych. Szukam przycisku akceptacji...",
+        u8"Vriendverzoek gevonden. Op zoek naar de knop Accepteren...",
+    } },
+    { u8"Accepting the friend request...", {
+        u8"Arkadaşlık isteği kabul ediliyor...",
+        u8"Aceptando la solicitud de amistad...",
+        u8"Aceitando o pedido de amizade...",
+        u8"Принятие запроса на добавление в друзья...",
+        u8"Die Freundschaftsanfrage wird angenommen...",
+        u8"Acceptation de la demande d'ami...",
+        u8"Accettazione della richiesta di amicizia...",
+        u8"Akceptowanie zaproszenia do grona znajomych...",
+        u8"Het vriendschapsverzoek accepteren...",
+    } },
+    { u8"Friend request found, but the accept button was not detected.", {
+        u8"Arkadaşlık isteği bulundu ancak kabul et düğmesi algılanmadı.",
+        u8"Se encontró solicitud de amistad, pero no se detectó el botón de aceptar.",
+        u8"Solicitação de amizade encontrada, mas o botão aceitar não foi detectado.",
+        u8"Запрос на добавление в друзья найден, но кнопка «Принять» не обнаружена.",
+        u8"Freundschaftsanfrage gefunden, aber die Schaltfläche „Akzeptieren“ wurde nicht erkannt.",
+        u8"Demande d'ami trouvée, mais le bouton d'acceptation n'a pas été détecté.",
+        u8"Richiesta di amicizia trovata, ma il pulsante Accetta non è stato rilevato.",
+        u8"Znaleziono zaproszenie do znajomych, ale nie wykryto przycisku akceptacji.",
+        u8"Vriendschapsverzoek gevonden, maar de knop Accepteren is niet gedetecteerd.",
+    } },
+    { u8"Account not visible yet. Scrolling...", {
+        u8"Hesap henüz görünmüyor. Kaydırılıyor...",
+        u8"Cuenta aún no visible. Desplazando...",
+        u8"Conta ainda não visível. Scrolling...",
+        u8"Аккаунт пока не виден. Прокрутка...",
+        u8"Konto noch nicht sichtbar. Scrollen...",
+        u8"Compte pas encore visible. Défilement...",
+        u8"Account non ancora visibile. Scorrimento...",
+        u8"Konto jeszcze nie widoczne. Przewijanie...",
+        u8"Account nog niet zichtbaar. Scrollen...",
+    } },
+    { u8"Account not found: ", {
+        u8"Hesap bulunamadı: ",
+        u8"Cuenta no encontrada: ",
+        u8"Conta não encontrada: ",
+        u8"Аккаунт не найден: ",
+        u8"Konto nicht gefunden: ",
+        u8"Compte introuvable : ",
+        u8"Account non trovato: ",
+        u8"Nie znaleziono konta: ",
+        u8"Account niet gevonden: ",
+    } },
+    { u8"Storage account is online. Waiting for transfer requests...", {
+        u8"Depolama hesabı çevrimiçi. Transfer taleplerini bekliyorum...",
+        u8"La cuenta de almacenamiento está en línea. Esperando solicitudes de transferencia...",
+        u8"A conta de armazenamento está online. Aguardando solicitações de transferência...",
+        u8"Учетная запись хранения находится в сети. Ожидание запросов на перенос...",
+        u8"Speicherkonto ist online. Warten auf Übertragungsanfragen...",
+        u8"Le compte de stockage est en ligne. En attente des demandes de transfert...",
+        u8"L'account di archiviazione è online. In attesa delle richieste di trasferimento...",
+        u8"Konto magazynu jest w trybie online. Oczekiwanie na prośby o przeniesienie...",
+        u8"Opslagaccount is online. Wachten op overdrachtsverzoeken...",
+    } },
+    { u8"ACCEPTING FRIEND REQUEST", {
+        u8"ARKADAŞLIK İSTEĞİ KABUL EDİLİYOR",
+        u8"ACEPTANDO SOLICITUD DE AMISTAD",
+        u8"ACEITANDO PEDIDO DE AMIZADE",
+        u8"ПРИНЯТИЕ ЗАПРОСА В ДРУЗЬЯ",
+        u8"AKZEPTIEREN DER FREUNDSCHAFTSANFRAGE",
+        u8"ACCEPTER LA DEMANDE D'AMI",
+        u8"ACCETTO LA RICHIESTA DI AMICIZIA",
+        u8"AKCEPTUJĘ ZAPROSZENIE DO ZNAJOMYCH",
+        u8"VRIENDVERZOEK ACCEPTEREN",
+    } },
+    { u8"Friend request received. Accepting...", {
+        u8"Arkadaşlık isteği alındı. Kabul ediliyor...",
+        u8"Solicitud de amistad recibida. Aceptando...",
+        u8"Solicitação de amizade recebida. Aceitando...",
+        u8"Запрос на добавление в друзья получен. Принятие...",
+        u8"Freundschaftsanfrage erhalten. Akzeptieren...",
+        u8"Demande d'ami reçue. Accepter...",
+        u8"Richiesta di amicizia ricevuta. Accettando...",
+        u8"Otrzymano zaproszenie do grona znajomych. Akceptuję...",
+        u8"Vriendschapsverzoek ontvangen. Accepteren...",
+    } },
+    { u8"Friend request accepted. Opening the farm...", {
+        u8"Arkadaşlık isteği kabul edildi. Çiftliğin açılışı...",
+        u8"Solicitud de amistad aceptada. Abriendo la finca...",
+        u8"Pedido de amizade aceito. Opening the farm...",
+        u8"Запрос на добавление в друзья принят. Открываем ферму...",
+        u8"Freundschaftsanfrage angenommen. Eröffnung der Farm...",
+        u8"Demande d'ami acceptée. Ouverture de la ferme...",
+        u8"Richiesta di amicizia accettata. Inaugurazione dell'azienda agricola...",
+        u8"Zaproszenie do grona znajomych zaakceptowane. Otwarcie farmy...",
+        u8"Vriendschapsverzoek geaccepteerd. Het openen van de boerderij...",
+    } },
+    { u8"Transfer request received from: ", {
+        u8"Aktarım isteği şu kişiden alındı: ",
+        u8"Solicitud de transferencia recibida de: ",
+        u8"Solicitação de transferência recebida de: ",
+        u8"Запрос на перенос получен от: ",
+        u8"Übertragungsanfrage erhalten von: ",
+        u8"Demande de transfert reçue de : ",
+        u8"Richiesta di trasferimento ricevuta da: ",
+        u8"Otrzymano żądanie przeniesienia od: ",
+        u8"Overdrachtsverzoek ontvangen van: ",
+    } },
+    { u8"OPENING FARM: ", {
+        u8"ÇİFTLİK AÇILIYOR: ",
+        u8"GRANJA DE APERTURA: ",
+        u8"ABERTURA DA FAZENDA: ",
+        u8"ОТКРЫТИЕ ФЕРМЫ: ",
+        u8"ERÖFFNUNG DER FARM: ",
+        u8"OUVERTURE DE FERME : ",
+        u8"APERTURA FATTORIA: ",
+        u8"OTWARCIE FARMY: ",
+        u8"OPENINGSBOERDERIJ: ",
+    } },
+    { u8"Shop opened. Starting the transfer...", {
+        u8"Mağaza açıldı. Transfer başlatılıyor...",
+        u8"Tienda abierta. Iniciando la transferencia...",
+        u8"Loja aberta. Starting the transfer...",
+        u8"Магазин открыт. Начинаем передачу...",
+        u8"Shop eröffnet. Die Übertragung wird gestartet...",
+        u8"Boutique ouverte. Démarrage du transfert...",
+        u8"Negozio aperto. Avvio del trasferimento...",
+        u8"Sklep otwarty. Rozpoczęcie transferu...",
+        u8"Winkel geopend. De overdracht starten...",
+    } },
+    { u8"Item listed. Waiting for synchronization...", {
+        u8"Öğe listelendi. Senkronizasyon bekleniyor...",
+        u8"Elemento listado. Esperando sincronización...",
+        u8"Item listado. Aguardando sincronização...",
+        u8"Товар указан. Ожидание синхронизации...",
+        u8"Artikel aufgeführt. Warten auf Synchronisierung...",
+        u8"Élément répertorié. En attente de synchronisation...",
+        u8"Elemento elencato. In attesa della sincronizzazione...",
+        u8"Element na liście. Oczekiwanie na synchronizację...",
+        u8"Artikel vermeld. Wachten op synchronisatie...",
+    } },
+    { u8"Item detected. Collecting...", {
+        u8"Öğe algılandı. Toplanıyor...",
+        u8"Elemento detectado. Coleccionando...",
+        u8"Item detectado. Coletando...",
+        u8"Объект обнаружен. Сбор...",
+        u8"Element erkannt. Sammeln...",
+        u8"Élément détecté. Collectionner...",
+        u8"Elemento rilevato. Raccolta...",
+        u8"Wykryto element. Zbieranie...",
+        u8"Artikel gedetecteerd. Verzamelen...",
+    } },
+    { u8"Item collected successfully.", {
+        u8"Öğe başarıyla toplandı.",
+        u8"Artículo recopilado exitosamente.",
+        u8"Item coletado com sucesso.",
+        u8"Объект успешно собран.",
+        u8"Artikel erfolgreich gesammelt.",
+        u8"Objet collecté avec succès.",
+        u8"Elemento raccolto correttamente.",
+        u8"Przedmiot został pomyślnie odebrany.",
+        u8"Artikel is succesvol verzameld.",
+    } },
+    { u8"Transfer timed out because the item was not listed.", {
+        u8"Öğe listelenmediğinden aktarım zaman aşımına uğradı.",
+        u8"Se agotó el tiempo de transferencia porque el elemento no estaba en la lista.",
+        u8"A transferência expirou porque o item não estava listado.",
+        u8"Тайм-аут передачи истек, поскольку элемент не был указан в списке.",
+        u8"Zeitüberschreitung bei der Übertragung, da das Element nicht aufgeführt war.",
+        u8"Le délai de transfert a expiré car l'élément n'était pas répertorié.",
+        u8"Trasferimento scaduto perché l'elemento non era elencato.",
+        u8"Upłynął limit czasu transferu, ponieważ przedmiotu nie było na liście.",
+        u8"Er is een time-out voor de overdracht opgetreden omdat het item niet in de lijst stond.",
+    } },
+    { u8"More items are available. Waiting in the shop...", {
+        u8"Daha fazla öğe mevcut. Mağazada bekliyorum...",
+        u8"Hay más artículos disponibles. Esperando en la tienda...",
+        u8"Mais itens estão disponíveis. Waiting in the shop...",
+        u8"Доступны дополнительные элементы. Жду в магазине...",
+        u8"Weitere Artikel sind verfügbar. Warten im Laden...",
+        u8"D'autres articles sont disponibles. En attendant dans la boutique...",
+        u8"Sono disponibili più articoli. Aspettando in negozio...",
+        u8"Dostępnych jest więcej elementów. Czekam w sklepie...",
+        u8"Er zijn meer artikelen beschikbaar. Wachten in de winkel...",
+    } },
+    { u8"Transfer timed out after 45 seconds. Returning home.", {
+        u8"Aktarım 45 saniye sonra zaman aşımına uğradı. Eve dönüyorum.",
+        u8"La transferencia expiró después de 45 segundos. Regresando a casa.",
+        u8"A transferência expirou após 45 segundos. Returning home.",
+        u8"Тайм-аут передачи истек через 45 секунд. Возвращение домой.",
+        u8"Zeitüberschreitung bei der Übertragung nach 45 Sekunden. Rückkehr nach Hause.",
+        u8"Le transfert a expiré après 45 secondes. Retour à la maison.",
+        u8"Trasferimento scaduto dopo 45 secondi. Ritorno a casa.",
+        u8"Upłynął limit czasu transferu po 45 sekundach. Powrót do domu.",
+        u8"Overdracht verliep na 45 seconden. Terug naar huis.",
+    } },
+    { u8"No more items remain. Finishing the transfer.", {
+        u8"Aktarılacak başka eşya kalmadı. Aktarım tamamlanıyor.",
+        u8"No quedan más elementos. Finalizando el traslado.",
+        u8"Não restam mais itens. Finishing the transfer.",
+        u8"Элементов больше не осталось. Завершение передачи.",
+        u8"Es sind keine weiteren Elemente mehr vorhanden. Beenden der Übertragung.",
+        u8"Il ne reste plus aucun élément. Fin du transfert.",
+        u8"Non rimangono altri elementi. Finendo il trasferimento.",
+        u8"Nie ma już więcej elementów. Zakończenie transferu.",
+        u8"Er zijn geen items meer over. De overdracht voltooien.",
+    } },
+    { u8"Returning home...", {
+        u8"Eve dönüyoruz...",
+        u8"Regresando a casa...",
+        u8"Voltando para casa...",
+        u8"Возвращаясь домой...",
+        u8"Rückkehr nach Hause...",
+        u8"De retour à la maison...",
+        u8"Ritorno a casa...",
+        u8"Wracając do domu...",
+        u8"Terug naar huis...",
+    } },
+    { u8"Home button was not detected. Using the fallback position.", {
+        u8"Ana ekran düğmesi algılanamadı. Yedek konum kullanılıyor.",
+        u8"No se detectó el botón de inicio. Usando la posición de respaldo.",
+        u8"O botão Home não foi detectado. Usando a posição de reserva.",
+        u8"Кнопка «Домой» не обнаружена. Использование запасной позиции.",
+        u8"Home-Taste wurde nicht erkannt. Nutzung der Fallback-Position.",
+        u8"Le bouton Accueil n'a pas été détecté. Utilisation de la position de repli.",
+        u8"Il pulsante Home non è stato rilevato. Utilizzando la posizione di riserva.",
+        u8"Nie wykryto przycisku Home. Korzystanie z pozycji awaryjnej.",
+        u8"Home-knop is niet gedetecteerd. Gebruik maken van de terugvalpositie.",
+    } },
+    { u8"WAITING FOR TRANSFER", {
+        u8"AKTARIM BEKLENİYOR",
+        u8"ESPERANDO TRANSFERENCIA",
+        u8"AGUARDANDO TRANSFERÊNCIA",
+        u8"ОЖИДАНИЕ ПЕРЕДАЧИ",
+        u8"WARTEN AUF ÜBERTRAGUNG",
+        u8"EN ATTENTE DE TRANSFERT",
+        u8"IN ATTESA DI TRASFERIMENTO",
+        u8"OCZEKUJĘ NA TRANSFER",
+        u8"WACHTEN OP OVERDRACHT",
+    } },
+    { u8"Transfer failed: The shop was not found or did not open.", {
+        u8"Aktarım başarısız oldu: Mağaza bulunamadı veya açılmadı.",
+        u8"Transferencia fallida: La tienda no fue encontrada o no abrió.",
+        u8"Falha na transferência: A loja não foi encontrada ou não abriu.",
+        u8"Передача не удалась: магазин не найден или не открылся.",
+        u8"Übertragung fehlgeschlagen: Der Shop wurde nicht gefunden oder nicht geöffnet.",
+        u8"Échec du transfert : la boutique n'a pas été trouvée ou n'a pas été ouverte.",
+        u8"Trasferimento non riuscito: il negozio non è stato trovato o non è stato aperto.",
+        u8"Transfer nie powiódł się: Sklep nie został znaleziony lub nie został otwarty.",
+        u8"Overdracht mislukt: de winkel is niet gevonden of niet geopend.",
+    } },
+    { u8"Transfer failed: The target account was not found.", {
+        u8"Aktarım başarısız oldu: Hedef hesap bulunamadı.",
+        u8"Error en la transferencia: no se encontró la cuenta de destino.",
+        u8"Falha na transferência: a conta de destino não foi encontrada.",
+        u8"Передача не удалась: целевая учетная запись не найдена.",
+        u8"Übertragung fehlgeschlagen: Das Zielkonto wurde nicht gefunden.",
+        u8"Échec du transfert : le compte cible est introuvable.",
+        u8"Trasferimento non riuscito: l'account di destinazione non è stato trovato.",
+        u8"Transfer nie powiódł się: Nie znaleziono konta docelowego.",
+        u8"Overdracht mislukt: het doelaccount is niet gevonden.",
+    } },
+    { u8"Sending a friend request to the storage account: ", {
+        u8"Depolama hesabına arkadaşlık isteği gönderme: ",
+        u8"Envío de una solicitud de amistad a la cuenta de almacenamiento: ",
+        u8"Enviando uma solicitação de amizade para a conta de armazenamento: ",
+        u8"Отправка запроса на добавление в друзья в учетную запись хранения: ",
+        u8"Senden einer Freundschaftsanfrage an das Speicherkonto: ",
+        u8"Envoi d'une demande d'ami au compte de stockage : ",
+        u8"Invio di una richiesta di amicizia all'account di archiviazione: ",
+        u8"Wysyłanie zaproszenia do znajomych na konto magazynu: ",
+        u8"Een vriendschapsverzoek naar het opslagaccount verzenden: ",
+    } },
+    { u8"Friend button was not detected.", {
+        u8"Arkadaş düğmesi algılanmadı.",
+        u8"No se detectó el botón de amigo.",
+        u8"O botão Amigo não foi detectado.",
+        u8"Кнопка «Друг» не обнаружена.",
+        u8"Die Schaltfläche „Freund“ wurde nicht erkannt.",
+        u8"Le bouton Ami n'a pas été détecté.",
+        u8"Il pulsante amico non è stato rilevato.",
+        u8"Nie wykryto przycisku znajomego.",
+        u8"Vriendknop is niet gedetecteerd.",
+    } },
+    { u8"Friend request sent.", {
+        u8"Arkadaşlık isteği gönderildi.",
+        u8"Solicitud de amistad enviada.",
+        u8"Solicitação de amizade enviada.",
+        u8"Запрос на добавление в друзья отправлен.",
+        u8"Freundschaftsanfrage gesendet.",
+        u8"Demande d'ami envoyée.",
+        u8"Richiesta di amicizia inviata.",
+        u8"Wysłano zaproszenie do znajomych.",
+        u8"Vriendschapsverzoek verzonden.",
+    } },
+    { u8"Creating a new MEmu instance in the background...", {
+        u8"Arka planda yeni bir MEmu örneği oluşturuluyor...",
+        u8"Creando una nueva instancia MEmu en segundo plano...",
+        u8"Criando uma nova instância MEmu em segundo plano...",
+        u8"Создание нового экземпляра MEmu в фоновом режиме...",
+        u8"Erstellen einer neuen MEmu-Instanz im Hintergrund ...",
+        u8"Création d'une nouvelle instance MEmu en arrière-plan...",
+        u8"Creazione di una nuova istanza MEmu in background...",
+        u8"Tworzenie nowej instancji MEmu w tle...",
+        u8"Een nieuwe MEmu-instantie op de achtergrond maken...",
+    } },
+    { u8"MEmu creation failed.\n\nRaw output:\n", {
+        u8"MEmu oluşturulamadı.\n\nHam çıktı:\n",
+        u8"La creación de MEmu falló.\n\nSalida en bruto:\n",
+        u8"Falha na criação de MEmu.\n\nSaída bruta:\n",
+        u8"Создание MEmu не удалось.\n\nСырый вывод:\n",
+        u8"MEmu Erstellung fehlgeschlagen.\n\nRohausgabe:\n",
+        u8"Échec de la création de MEmu.\n\nSortie brute :\n",
+        u8"La creazione di MEmu è fallita.\n\nOutput grezzo:\n",
+        u8"MEmu utworzenie nie powiodło się.\n\nSurowe wyjście:\n",
+        u8"MEmu aanmaak mislukt.\n\nRuwe output:\n",
+    } },
+    { u8"The created VM exceeds the supported limit of six instances: ", {
+        u8"Oluşturulan VM, desteklenen altı örnek sınırını aşıyor: ",
+        u8"La VM creada excede el límite soportado de seis instancias: ",
+        u8"A VM criada excede o limite suportado de seis instâncias: ",
+        u8"Созданная ВМ превышает поддерживаемый лимит в шесть экземпляров: ",
+        u8"Die erstellte VM überschreitet das unterstützte Limit von sechs Instanzen: ",
+        u8"La VM créée dépasse la limite prise en charge de six instances : ",
+        u8"La VM creata supera il limite supportato di sei istanze: ",
+        u8"Utworzona maszyna wirtualna przekracza obsługiwany limit sześciu instancji: ",
+        u8"De aangemaakte VM overschrijdt de ondersteunde limiet van zes instanties: ",
+    } },
+    { u8"Virtual machine created. Waiting for MEmu configuration files...", {
+        u8"Sanal makine oluşturuldu. MEmu konfigürasyon dosyaları bekleniyor...",
+        u8"Máquina virtual creada. Esperando los archivos de configuración de MEmu...",
+        u8"Máquina virtual criada. Aguardando arquivos de configuração MEmu...",
+        u8"Виртуальная машина создана. Ожидание файлов конфигурации MEmu...",
+        u8"Virtuelle Maschine erstellt. Warten auf MEmu-Konfigurationsdateien ...",
+        u8"Machine virtuelle créée. En attente des fichiers de configuration MEmu...",
+        u8"Macchina virtuale creata. In attesa dei file di configurazione MEmu...",
+        u8"Utworzono maszynę wirtualną. Oczekiwanie na pliki konfiguracyjne MEmu...",
+        u8"Virtuele machine gemaakt. Wachten op MEmu configuratiebestanden...",
+    } },
+    { u8"Applying emulator settings (640x480, DPI 100, Root, DirectX)...", {
+        u8"Emülatör ayarları uygulanıyor (640x480, DPI 100, Root, DirectX)...",
+        u8"Aplicando la configuración del emulador (640x480, DPI 100, Root, DirectX)...",
+        u8"Aplicando configurações do emulador (640x480, DPI 100, Root, DirectX)...",
+        u8"Применение настроек эмулятора (640x480, DPI 100, Root, DirectX)...",
+        u8"Emulatoreinstellungen werden angewendet (640x480, DPI 100, Root, DirectX)...",
+        u8"Application des paramètres de l'émulateur (640x480, DPI 100, Root, DirectX)...",
+        u8"Applicazione delle impostazioni dell'emulatore (640x480, DPI 100, Root, DirectX)...",
+        u8"Stosowanie ustawień emulatora (640x480, DPI 100, Root, DirectX)...",
+        u8"Emulatorinstellingen toepassen (640x480, DPI 100, Root, DirectX)...",
+    } },
+    { u8"Starting the emulator...", {
+        u8"Emülatör başlatılıyor...",
+        u8"Iniciando el emulador...",
+        u8"Iniciando o emulador...",
+        u8"Запуск эмулятора...",
+        u8"Der Emulator wird gestartet...",
+        u8"Démarrage de l'émulateur...",
+        u8"Avvio dell'emulatore...",
+        u8"Uruchamianie emulatora...",
+        u8"De emulator starten...",
+    } },
+    { u8"MEmu created a different VM index, so NXRTH linked it automatically.\n\nRequested instance: ", {
+        u8"MEmu farklı bir VM dizini oluşturdu, bu nedenle NXRTH bunu otomatik olarak bağladı.\n\nTalep edilen örnek: ",
+        u8"MEmu creó un índice de VM diferente, por lo que NXRTH la enlazó automáticamente.\n\nInstancia solicitada: ",
+        u8"MEmu criou um índice de VM diferente, então NXRTH o vinculou automaticamente.\n\nInstância solicitada: ",
+        u8"MEmu создал другой индекс ВМ, поэтому NXRTH автоматически его связал.\n\nЗапрошенный экземпляр: ",
+        u8"MEmu hat einen anderen VM-Index erstellt, daher hat NXRTH ihn automatisch verlinkt.\n\nAngeforderte Instanz: ",
+        u8"MEmu a créé un index VM différent, donc NXRTH l'a lié automatiquement.\n\nInstance demandée : ",
+        u8"MEmu ha creato un indice VM diverso, quindi NXRTH lo ha collegato automaticamente.\n\nIstanza richiesta: ",
+        u8"MEmu utworzył inny indeks maszyny wirtualnej, więc NXRTH połączył ją automatycznie.\n\nŻądana instancja: ",
+        u8"MEmu maakte een andere VM-index aan, dus NXRTH koppelde het automatisch.\n\nGevraagde instantie: ",
+    } },
+    { u8"\nCreated VM: ", {
+        u8"\nOluşturulan VM: ",
+        u8"\nVM creada: ",
+        u8"\nVM criada: ",
+        u8"\nСозданная ВМ: ",
+        u8"\nErstellte VM: ",
+        u8"\nVM créée : ",
+        u8"\nVM creata: ",
+        u8"\nUtworzona maszyna wirtualna: ",
+        u8"\nAangemaakte VM: ",
+    } },
+    { u8"MEmu was created successfully.\n\nVM index: ", {
+        u8"MEmu başarıyla oluşturuldu.\n\nVM dizini: ",
+        u8"MEmu se creó exitosamente.\n\nÍndice de VM: ",
+        u8"MEmu foi criada com sucesso.\n\nÍndice da VM: ",
+        u8"MEmu была успешно создана.\n\nИндекс ВМ: ",
+        u8"MEmu wurde erfolgreich erstellt.\n\nVM-Index: ",
+        u8"MEmu a été créée avec succès.\n\nIndex VM : ",
+        u8"MEmu è stata creata con successo.\n\nIndice VM: ",
+        u8"MEmu została utworzona pomyślnie.\n\nIndeks maszyny wirtualnej: ",
+        u8"MEmu is succesvol aangemaakt.\n\nVM-index: ",
+    } },
+    { u8"\nSettings: 640x480, 100 DPI, Root, DirectX.\n\nThe emulator is starting.", {
+        u8"\nAyarlar: 640x480, 100 DPI, Root, DirectX.\n\nEmülatör başlatılıyor.",
+        u8"\nConfiguraciones: 640x480, 100 DPI, Root, DirectX.\n\nEl emulador se está iniciando.",
+        u8"\nConfigurações: 640x480, 100 DPI, Root, DirectX.\n\nO emulador está iniciando.",
+        u8"\nНастройки: 640x480, 100 DPI, Root, DirectX.\n\nЭмулятор запускается.",
+        u8"\nEinstellungen: 640x480, 100 DPI, Root, DirectX.\n\nDer Emulator wird gestartet.",
+        u8"\nParamètres : 640x480, 100 DPI, Root, DirectX.\n\nL'émulateur est en cours de démarrage.",
+        u8"\nImpostazioni: 640x480, 100 DPI, Root, DirectX.\n\nL'emulatore sta avviando.",
+        u8"\nUstawienia: 640x480, 100 DPI, Root, DirectX.\n\nEmulator uruchamia się.",
+        u8"\nInstellingen: 640x480, 100 DPI, Root, DirectX.\n\nDe emulator wordt gestart.",
+    } },
+    { u8"STARTING ADB...", {
+        u8"BAŞLIYOR ADB...",
+        u8"INICIANDO ADB...",
+        u8"INICIANDO ADB...",
+        u8"НАЧИНАЕМ ADB...",
+        u8"STARTET ADB...",
+        u8"DÉMARRAGE de ADB...",
+        u8"AVVIO ADB...",
+        u8"URUCHAMIANIE ADB...",
+        u8"BEGINNEN met ADB...",
+    } },
+    { u8"ADB START FAILED", {
+        u8"ADB BAŞLATMA BAŞARISIZ",
+        u8"ADB FALLO DE INICIO",
+        u8"ADB FALHA NO INÍCIO",
+        u8"ADB НЕУДАЧА ЗАПУСКА",
+        u8"ADB START FEHLGESCHLAGEN",
+        u8"ADB ÉCHEC DU DÉMARRAGE",
+        u8"ADB AVVIO NON FALLITO",
+        u8"ADB URUCHOMIENIE NIEUDANE",
+        u8"ADB START MISLUKT",
+    } },
+    { u8"ADB OFFLINE", {
+        u8"ADB ÇEVRİMDIŞI",
+        u8"ADB SIN CONEXIÓN",
+        u8"ADB OFF-LINE",
+        u8"ADB ОФФЛАЙН",
+        u8"ADB OFFLINE",
+        u8"ADB HORS LIGNE",
+        u8"ADB NON IN LINEA",
+        u8"ADB W trybie offline",
+        u8"ADB OFFLINE",
+    } },
+    { u8"PATH ERROR", {
+        u8"YOL HATASI",
+        u8"ERROR DE RUTA",
+        u8"PATH ERROR",
+        u8"ОШИБКА ПУТИ",
+        u8"PFADFEHLER",
+        u8"ERREUR DE CHEMIN",
+        u8"ERRORE PERCORSO",
+        u8"BŁĄD ŚCIEŻKI",
+        u8"PADFOUT",
+    } },
+    { u8"Closing all menus to return to main screen...", {
+        u8"Ana ekrana dönmek için tüm menüler kapatılıyor...",
+        u8"Cerrando todos los menús para volver a la pantalla principal...",
+        u8"Fechando todos os menus para retornar à tela principal...",
+        u8"Закрытие всех меню для возврата на главный экран...",
+        u8"Schließe alle Menüs, um zum Hauptbildschirm zurückzukehren...",
+        u8"Fermeture de tous les menus pour revenir à l'écran principal...",
+        u8"Chiusura di tutti i menu per tornare alla schermata principale...",
+        u8"Zamknięcie wszystkich menu i powrót do ekranu głównego...",
+        u8"Alle menu's sluiten om terug te keren naar het hoofdscherm...",
+    } },
+    { u8"FOUND!", {
+        u8"BULUNDU!",
+        u8"¡ENCONTRADO!",
+        u8"ENCONTRADO!",
+        u8"НАЙДЕН!",
+        u8"GEFUNDEN!",
+        u8"TROUVÉ !",
+        u8"TROVATO!",
+        u8"ZNALEZIONO!",
+        u8"GEVONDEN!",
+    } },
+    { u8"MISSING", {
+        u8"KAYIP",
+        u8"DESAPARECIDO",
+        u8"AUSENTE",
+        u8"ОТСУТСТВУЕТ",
+        u8"FEHLT",
+        u8"MANQUANT",
+        u8"MANCANTE",
+        u8"BRAK",
+        u8"ONTBREEKT",
+    } },
+    { u8"OPENING TARGET FARM", {
+        u8"HEDEF ÇİFTLİK AÇILIYOR",
+        u8"APERTURA DE GRANJA OBJETIVO",
+        u8"ABERTURA DA FAZENDA ALVO",
+        u8"ОТКРЫТИЕ ЦЕЛЕВОЙ ФЕРМЫ",
+        u8"ZIELFARM ERÖFFNEN",
+        u8"OUVERTURE DE LA FERME CIBLE",
+        u8"APERTURA FATTORIA TARGET",
+        u8"OTWARCIE FARMY DOCELOWEJ",
+        u8"OPENING DOELBOERDERIJ",
+    } },
+    { u8"NXRTH - Error", {
+        u8"NXRTH - Hata",
+        u8"NXRTH - Error",
+        u8"NXRTH - Erro",
+        u8"NXRTH - Ошибка",
+        u8"NXRTH - Fehler",
+        u8"NXRTH - Erreur",
+        u8"NXRTH - Errore",
+        u8"NXRTH - Błąd",
+        u8"NXRTH - Fout",
+    } },
+    { u8"NXRTH - Instance Limit", {
+        u8"NXRTH - Bot Sınırı",
+        u8"NXRTH - Límite de instancias",
+        u8"NXRTH - Limite de instâncias",
+        u8"NXRTH - Лимит экземпляров",
+        u8"NXRTH - Instanzlimit",
+        u8"NXRTH - Limite d'instances",
+        u8"NXRTH - Limite istanze",
+        u8"NXRTH - Limit instancji",
+        u8"NXRTH - Instantielimiet",
+    } },
+    { u8"NXRTH - Automatic Link", {
+        u8"NXRTH - Otomatik Bağlantı",
+        u8"NXRTH - Enlace automático",
+        u8"NXRTH - Vínculo automático",
+        u8"NXRTH - Автоматическая привязка",
+        u8"NXRTH - Automatische Verknüpfung",
+        u8"NXRTH - Liaison automatique",
+        u8"NXRTH - Collegamento automatico",
+        u8"NXRTH - Automatyczne łączenie",
+        u8"NXRTH - Automatische koppeling",
+    } },
+    { u8"NXRTH - Emulator Creator", {
+        u8"NXRTH - Emülatör Oluşturucu",
+        u8"NXRTH - Creador de emuladores",
+        u8"NXRTH - Criador de emulador",
+        u8"NXRTH - Создание эмулятора",
+        u8"NXRTH - Emulator-Erstellung",
+        u8"NXRTH - Création d'émulateur",
+        u8"NXRTH - Creazione emulatore",
+        u8"NXRTH - Kreator emulatora",
+        u8"NXRTH - Emulator maken",
+    } },
+};
+
+using TranslationLookup = std::unordered_map<std::string_view, const TranslationRow*>;
+
+const TranslationLookup& GetTranslationLookup() {
+    static const TranslationLookup lookup = [] {
+        TranslationLookup result;
+        result.reserve(sizeof(kTranslations) / sizeof(kTranslations[0]));
+        for (const TranslationRow& row : kTranslations) {
+            result.emplace(row.key, &row);
+        }
+        return result;
+    }();
+    return lookup;
+}
+} // namespace
 
 int g_Language = -1;
 
-void AutoDetectLanguage() {
-    LANGID langId = GetUserDefaultUILanguage();
-    WORD primaryLang = PRIMARYLANGID(langId);
+int GetLanguageCount() {
+    return kLanguageCount;
+}
 
-    switch (primaryLang) {
+const char* const* GetLanguageNames() {
+    return kLanguageNames;
+}
+
+void AutoDetectLanguage() {
+    switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
     case LANG_TURKISH:    g_Language = 1; break;
     case LANG_SPANISH:    g_Language = 2; break;
     case LANG_PORTUGUESE: g_Language = 3; break;
     case LANG_RUSSIAN:    g_Language = 4; break;
     case LANG_GERMAN:     g_Language = 5; break;
+    case LANG_FRENCH:     g_Language = 6; break;
+    case LANG_ITALIAN:    g_Language = 7; break;
+    case LANG_POLISH:     g_Language = 8; break;
+    case LANG_DUTCH:      g_Language = 9; break;
     default:              g_Language = 0; break;
     }
 }
 
 const char* Tr(const char* text) {
-    if (g_Language <= 0) return text;
-
-    std::string s(text);
-
-    if (g_Language == 1) {
-        if (s == "DASHBOARD") return u8"KONTROL PANELİ";
-        if (s == "BOT MANAGER") return u8"BOT YÖNETİCİSİ";
-        if (s == "REMOTE & WEBHOOK") return u8"UZAKTAN KONTROL & BİLDİRİM";
-        if (s == "SETTINGS") return u8"AYARLAR";
-        if (s == "LOGS") return u8"SİSTEM KAYITLARI";
-        if (s == "TEMPLATES") return u8"ŞABLONLAR";
-        if (s == "Active Instances: %d/4") return u8"Aktif Botlar: %d/4";
-        if (s == "User: %s") return u8"Kullanıcı: %s";
-        if (s == "License Expiring! (%d Days)") return u8"Lisans Bitiyor! (%d Gün)";
-        if (s == "Days Left: %d") return u8"Kalan Gün: %d";
-
-        if (s == "INSTANCES OVERVIEW") return u8"GENEL BAKIŞ";
-        if (s == "TOTAL RUNTIME") return u8"TOPLAM ÇALIŞMA SÜRESİ";
-        if (s == "TOTAL HARVEST / SALES") return u8"TOPLAM HASAT / SATIŞ";
-        if (s == "TOTAL COINS") return u8"TOPLAM ALTIN";
-        if (s == "TOTAL DIAMONDS") return u8"TOPLAM ELMAS";
-        if (s == "INSTANCE #%d") return u8"SLOT #%d";
-        if (s == "[ONLINE]") return u8"[ÇEVRİMİÇİ]";
-        if (s == "[OFFLINE]") return u8"[ÇEVRİMDIŞI]";
-        if (s == "ADB: %s") return u8"ADB Portu: %s";
-        if (s == "Slot: %s") return u8"Hesap: %s";
-        if (s == "Farm: %s | Lvl: %d") return u8"Çiftlik: %s | Svy: %d";
-        if (s == "Tag: %s") return u8"Oyuncu Etiketi: %s";
-        if (s == "Barn: Bolt: %d | Tape: %d | Plank: %d") return u8"Ambar: Cıvata: %d | Bant: %d | Kalas: %d";
-        if (s == "Silo: Nail: %d | Screw: %d | Panel: %d") return u8"Silo: Çivi: %d | Vida: %d | Panel: %d";
-        if (s == "Harvests: %d | Sales: %d") return u8"Hasat Sayısı: %d | Satış Sayısı: %d";
-        if (s == "Status: %s") return u8"Durum: %s";
-        if (s == "Enable this instance in 'Bot Manager'") return u8"'Bot Yöneticisi' sekmesinden bu botu aktif edin.";
-
-        if (s == "BOT INSTANCE MANAGER") return u8"BOT YÖNETİM PANELİ";
-        if (s == "Instance #") return u8"Bot #";
-        if (s == "CONNECTION SETTINGS") return u8"BAĞLANTI AYARLARI";
-        if (s == "Enable This Instance") return u8"Bu Botu Çalıştır";
-        if (s == "(Target Port: %s)") return u8"(Hedef Port: %s)";
-        if (s == "ADB Serial/Port##adb") return u8"ADB Seri No/Port##adb";
-        if (s == "Example: 127.0.0.1:21503 for MEmu 1") return u8"Örnek: MEmu 1 için 127.0.0.1:21503";
-        if (s == "Input Device (Touchscreen):") return u8"Giriş Aygıtı (Dokunmatik):";
-        if (s == "VM Name##vm") return u8"Sanat Makine Adı##vm";
-        if (s == "Auto Detect") return u8"Otomatik Bul";
-        if (s == "TOOLS & DIAGNOSTICS") return u8"ARAÇLAR & TESTLER";
-        if (s == "Select Mode:") return u8"Ekim Modu Seçin:";
-        if (s == "Wheat (2m)") return u8"Buğday (2dk)";
-        if (s == "Corn (5m)") return u8"Mısır (5dk)";
-        if (s == "Carrot (10m)") return u8"Havuç (10dk)";
-        if (s == "Soybean (20m)") return u8"Soya Fasulyesi (20dk)";
-        if (s == "Sugarcane (30m)") return u8"Şeker Kamışı (30dk)";
-        if (s == "Enable Random Salecycle") return u8"Rastgele Satış Döngüsü";
-        if (s == "Instead of going sales after every harvest, it will go randomly. Can Reduce Ban Chance") return u8"Her hasattan sonra dükkana gitmek yerine rastgele gider. Ban riskini azaltır. Bence aç bunu kanka";
-        if (s == "TEST SEED") return u8"TOHUM TESTİ";
-        if (s == "TEST GROWN") return u8"EKİN TESTİ";
-        if (s == "TEST FIELD") return u8"TARLA TESTİ";
-        if (s == "TEST SICKLE") return u8"TIRPAN TESTİ";
-        if (s == "ENABLE EXTENDED VIEW (Restart Required)") return u8"GENİŞ GÖRÜŞÜ AÇ (Yeniden Başlatma Gerekir)";
-        if (s == "Optimizes game view configuration. Requires Root.") return u8"Oyun içi kamera açısını optimize eder. Root gerektirir.";
-        if (s == "DISABLE WINTER THEME (Restart Required)") return u8"KIŞ TEMASINI KAPAT (Yeniden Başlatma Gerekir)";
-        if (s == "Removes winter theme, bot works better with this. Requires Root.") return u8"Kış temasındaki karları kaldırır, bot daha hatasız çalışır. Root gerektirir.";
-
-        if (s == "ACCOUNT MANAGER") return u8"HESAP YÖNETİCİSİ";
-        if (s == "Slot ") return u8"Hesap ";
-        if (s == " (SELECTED)") return u8" (SEÇİLİ)";
-        if (s == " [SAVED]") return u8" [KAYITLI]";
-        if (s == "Actions:") return u8"İşlemler:";
-        if (s == "Slot Selector") return u8"Hesap Seçici";
-        if (s == "SAVE SLOT DATA") return u8"HESABI HAFIZAYA KAYDET";
-        if (s == "LOAD SLOT DATA") return u8"HESABI OYUNA YÜKLE";
-        if (s == "LAUNCH MEMU + HAY DAY") return u8"MEMU + HAY DAY BAŞLAT";
-        if (s == "START BOT") return u8"BOTU BAŞLAT";
-        if (s == "STOP BOT") return u8"BOTU DURDUR";
-
-        if (s == "Account Management") return u8"Hesap Yönetimi";
-        if (s == "TRANSFER ACCOUNTS BETWEEN INSTANCES") return u8"BOTLAR ARASI HESAP AKTARIMI";
-        if (s == "Move an account data file from one slot to another.") return u8"Bir hesabı, farklı bir emülatördeki bota aktarmanızı sağlar.";
-        if (s == "SOURCE (From)") return u8"KAYNAK (Nereden)";
-        if (s == "DESTINATION (To)") return u8"HEDEF (Nereye)";
-        if (s == "Instance 1") return u8"Bot 1";
-        if (s == "Instance 2") return u8"Bot 2";
-        if (s == "Instance 3") return u8"Bot 3";
-        if (s == "Instance 4") return u8"Bot 4";
-        if (s == "Slot 1") return u8"Hesap 1";
-        if (s == "Slot 2") return u8"Hesap 2";
-        if (s == "Slot 3") return u8"Hesap 3";
-        if (s == "Slot 4") return u8"Hesap 4";
-        if (s == "Slot 5") return u8"Hesap 5";
-        if (s == "Instance##src") return u8"Bot##src";
-        if (s == "Slot##src") return u8"Hesap##src";
-        if (s == "Instance##dst") return u8"Bot##dst";
-        if (s == "Slot##dst") return u8"Hesap##dst";
-        if (s == "MOVE ACCOUNT") return u8"HESABI TAŞI";
-        if (s == "CREATE NEW ACCOUNT (WIPE GAME DATA)") return u8"YENİ HESAP OLUŞTUR (OYUN VERİSİNİ SİL)";
-        if (s == "BEWARE! This will delete current game data. Make sure you saved the account!") return u8"DİKKAT! Bu işlem emülatördeki oyun verisini sıfırlar. Hesabı kaydettiğinizden emin olun!";
-        if (s == "Select Instance##wipe") return u8"Bot Seç##wipe";
-        if (s == "WIPE DATA & CREATE NEW") return u8"VERİYİ SİL & YENİ HESAP AÇ";
-
-        if (s == "Auto Tom Config") return u8"Otomatik Tom Ayarı";
-        if (s == "AUTOMATED TOM MANAGER") return u8"OTOMATİK TOM YÖNETİCİSİ";
-        if (s == "Tom will be triggered every 2 hours if contract is active.") return u8"Eğer anlaşma aktifse, Tom her 2 saatte bir otomatik gönderilir.";
-        if (s == "Instance##tom") return u8"Bot##tom";
-        if (s == "Slot##tom") return u8"Hesap##tom";
-        if (s == "Enable Auto Tom For This Slot") return u8"Bu Hesap İçin Otomatik Tom'u Aç";
-        if (s == "Remaining Hours") return u8"Kalan Saat";
-        if (s == "Enter how many hours left on Tom's contract.") return u8"Tom'un sözleşmesinin bitmesine kaç saat kaldığını yazın.";
-        if (s == "Search Category") return u8"Arama Kategorisi";
-        if (s == "Barn") return u8"Ambar";
-        if (s == "Silo") return u8"Silo";
-        if (s == "Item Search Name") return u8"Aranacak Eşya Adı";
-        if (s == "ACCEPT ITEM NAME") return u8"EŞYA ADINI ONAYLA";
-        if (s == "Current Target Item: [%s]") return u8"Mevcut Hedef Eşya: [%s]";
-
-        if (s == "Farm Inspector") return u8"Çiftlik Durumu";
-        if (s == "LIVE FARM OVERVIEW & INVENTORY") return u8"CANLI ÇİFTLİK VE ENVANTER DURUMU";
-        if (s == "Select an instance and slot to view real-time AI-extracted data.") return u8"Yapay zekanın oyundan çektiği anlık verileri görmek için hesap seçin.";
-        if (s == "Instance##info") return u8"Bot##info";
-        if (s == "Slot##info") return u8"Hesap##info";
-        if (s == "Player Tag: ") return u8"Oyuncu Etiketi: ";
-        if (s == "Coins: %d") return u8"Altın: %d";
-        if (s == "Diamonds: %d") return u8"Elmas: %d";
-        if (s == "[ BARN EXPANSION ]") return u8"[ AMBAR MALZEMELERİ ]";
-        if (s == "[ SILO EXPANSION ]") return u8"[ SİLO MALZEMELERİ ]";
-        if (s == "[ LAND EXPANSION ]") return u8"[ ARAZİ MALZEMELERİ ]";
-
-        // YENİ EKLENEN ARAYÜZ KELİMELERİ (DISCORD, TEMPLATES VS.)
-        if (s == "REMOTE COMMANDS") return u8"UZAKTAN KOMUTLAR";
-        if (s == "DISCORD SETTINGS") return u8"DISCORD AYARLARI";
-        if (s == "Enable Discord Remote Control") return u8"Discord Uzaktan Kontrolü Aç";
-        if (s == "Your Personal Discord ID:") return u8"Kişisel Discord ID'niz:";
-        if (s == "Get this by typing !id in Discord.") return u8"Discord'da !id yazarak alabilirsiniz.";
-        if (s == "[ZERO-KNOWLEDGE ARCHITECTURE]") return u8"[SIFIR BİLGİ MİMARİSİ]";
-        if (s == "Type !status, !ss 1 or !ssall in Discord. The bot will automatically recognize you!") return u8"Discord'da !status, !ss 1 veya !ssall yazın. Bot sizi otomatik tanıyacaktır!";
-        if (s == "TELEGRAM SETTINGS") return u8"TELEGRAM AYARLARI";
-        if (s == "Enable Telegram Remote") return u8"Telegram Uzaktan Kontrolü Aç";
-        if (s == "Bot Token:") return u8"Bot Tokeni:";
-        if (s == "Chat ID:") return u8"Sohbet (Chat) ID:";
-        if (s == "BARN & SILO NOTIFICATIONS") return u8"AMBAR VE SİLO BİLDİRİMLERİ";
-        if (s == "Enable Webhook Notification") return u8"Webhook Bildirimlerini Aç";
-        if (s == "Webhook URL:") return u8"Webhook URL'si:";
-        if (s == "Send Screenshot Image with Webhook") return u8"Webhook ile Ekran Görüntüsü Gönder";
-        if (s == "If disabled, only the text report will be sent (Faster).") return u8"Kapalıysa sadece metin raporu gider (Daha hızlı).";
-
-        if (s == "Enable Discord Rich Presence") return u8"Discord Rich Presence Aç";
-        if (s == "(Show your bot status on Discord profile)") return u8"(Bot durumunuzu Discord profilinizde gösterir)";
-        if (s == "ABOUT") return u8"HAKKINDA";
-        if (s == "Made by North") return u8"North tarafından yapılmıştır";
-        if (s == "Special thanks to: Nuron, Dext3r, K T and HugoAyaz for their contributions.") return u8"Katkılarından dolayı Nuron, Dext3r, K T ve HugoAyaz'a özel teşekkürler.";
-
-        if (s == "GAME CHECKERS") return u8"OYUN KONTROLCÜLERİ";
-        if (s == "FARMING TEMPLATES") return u8"TARIM ŞABLONLARI";
-        if (s == "SHOP TEMPLATES") return u8"DÜKKAN ŞABLONLARI";
-        if (s == "UI TEMPLATES") return u8"ARAYÜZ ŞABLONLARI";
-        if (s == "Load") return u8"Yükle";
-        if (s == "Field") return u8"Tarla";
-        if (s == "Wheat") return u8"Buğday";
-        if (s == "Sickle") return u8"Tırpan";
-        if (s == "Grown Wheat") return u8"Büyümüş Buğday";
-        if (s == "Corn Seed") return u8"Mısır Tohumu";
-        if (s == "Grown Corn") return u8"Büyümüş Mısır";
-        if (s == "Carrot Seed") return u8"Havuç Tohumu";
-        if (s == "Grown Carrot") return u8"Büyümüş Havuç";
-        if (s == "Carrot Shop") return u8"Havuç (Dükkan)";
-        if (s == "Soybean Seed") return u8"Soya Tohumu";
-        if (s == "Grown Soybean") return u8"Büyümüş Soya";
-        if (s == "Soybean Shop") return u8"Soya (Dükkan)";
-        if (s == "Sugarcane Seed") return u8"Şeker Kamışı Tohumu";
-        if (s == "Grown Sugarcane") return u8"Büyümüş Kamış";
-        if (s == "Sugarcane Shop") return u8"Şeker Kamışı (Dükkan)";
-        if (s == "Mailbox") return u8"Posta Kutusu";
-        if (s == "Shop") return u8"Dükkan";
-        if (s == "Wheat Shop") return u8"Buğday (Dükkan)";
-        if (s == "Corn Shop") return u8"Mısır (Dükkan)";
-        if (s == "Crate") return u8"Boş Kasa";
-        if (s == "Cross") return u8"Çarpı (X)";
-        if (s == "Create Sale") return u8"Satış Oluştur";
-        if (s == "Level Up") return u8"Seviye Atlama";
-        if (s == "Level Up Cont.") return u8"Seviye Devam";
-
-        if (s == "GLOBAL APPLICATION SETTINGS") return u8"GLOBAL UYGULAMA AYARLARI";
-        if (s == "SAVE ALL SETTINGS") return u8"TÜM AYARLARI KAYDET";
-        if (s == "ADB Executable Path:") return u8"ADB.exe Dosya Yolu:";
-        if (s == "MEmu Console Path:") return u8"MEmuConsole.exe Dosya Yolu:";
-        if (s == "Browse") return u8"Gözat";
-        if (s == "Browse##memu") return u8"Gözat##memu";
-        if (s == "File not found!") return u8"Dosya bulunamadı!";
-        if (s == "TIMING & DELAY SETTINGS (Advanced)") return u8"ZAMANLAMA VE GECİKME AYARLARI (Gelişmiş)";
-        if (s == "Adjust these values if your emulator is lagging or running too fast.") return u8"Eğer emülatörünüz kasıyorsa veya çok hızlıysa bu ayarları değiştirin.";
-        if (s == "Game Load Wait (Seconds)") return u8"Oyun Yüklenme Beklemesi (Saniye)";
-        if (s == "Harvest Cooldown (ms)") return u8"Hasat Sonrası Bekleme (ms)";
-        if (s == "Planting Cooldown (ms)") return u8"Ekim Sonrası Bekleme (ms)";
-        if (s == "Shop Open Wait (ms)") return u8"Dükkan Açılış Beklemesi (ms)";
-        if (s == "Next Account Wait (ms)") return u8"Diğer Hesaba Geçiş Beklemesi (ms)";
-        if (s == "Shop Automation Speeds:") return u8"Dükkan Otomasyon Hızları:";
-        if (s == "Crate Menu Wait (ms)") return u8"Kasa Menüsü Beklemesi (ms)";
-        if (s == "Coin Collect Wait (ms)") return u8"Altın Toplama Beklemesi (ms)";
-        if (s == "Product Select Wait (ms)") return u8"Ürün Seçme Beklemesi (ms)";
-        if (s == "Create Sale Wait (ms)") return u8"Satış Oluşturma Beklemesi (ms)";
-
-        if (s == "WHEAT GESTURE SETTINGS") return u8"BUĞDAY HAREKET AYARLARI";
-        if (s == "V-Shape Spread (px)") return u8"V-Şekli Açıklığı (px)";
-        if (s == "Swipe Up Distance (px)") return u8"Yukarı Kaydırma Mesafesi (px)";
-        if (s == "CORN GESTURE SETTINGS (NEW)") return u8"MISIR HAREKET AYARLARI (YENİ)";
-        if (s == "Corn Spread Right (px)") return u8"Mısır Sağa Kayma (px)";
-        if (s == "Corn Spread Left (px)") return u8"Mısır Sola Kayma (px)";
-        if (s == "Corn Move Down (px)") return u8"Mısır Aşağı İnme (px)";
-        if (s == "Corn Move Up (px)") return u8"Mısır Yukarı Çıkma (px)";
-        if (s == "--- CARROT GESTURE ---") return u8"--- HAVUÇ HAREKET AYARLARI ---";
-        if (s == "Carrot Spread Right (px)") return u8"Havuç Sağa Kayma (px)";
-        if (s == "Carrot Spread Left (px)") return u8"Havuç Sola Kayma (px)";
-        if (s == "Carrot Move Down (px)") return u8"Havuç Aşağı İnme (px)";
-        if (s == "Carrot Move Up (px)") return u8"Havuç Yukarı Çıkma (px)";
-        if (s == "--- SOYBEAN GESTURE (Z-SHAPE) ---") return u8"--- SOYA FASULYESİ (Z-ŞEKLİ) ---";
-        if (s == "Soybean Spread UP (px)") return u8"Soya Yukarı Açılma (px)";
-        if (s == "Soybean Spread DOWN (px)") return u8"Soya Aşağı İnme (px)";
-        if (s == "Soybean Move RIGHT 1 (px)") return u8"Soya Sağa Kayış 1 (px)";
-        if (s == "Soybean Move LEFT (px)") return u8"Soya Sola Dönüş (px)";
-        if (s == "Soybean Move RIGHT 2 (px)") return u8"Soya Sağa Kayış 2 (px)";
-        if (s == "GLOBAL GESTURE SETTINGS") return u8"GLOBAL HAREKET AYARLARI";
-        if (s == "Gesture Steps (Speed)") return u8"Hareket Adımları (Hız)";
-
-        if (s == "CLEAR LOGS") return u8"LOGLARI TEMİZLE";
-        if (s == "Auto-Scroll") return u8"Otomatik Kaydır";
-        if (s == "Filter:") return u8"Filtre:";
-        if (s == "ALL") return u8"HEPSİ";
-        if (s == "INST #1") return u8"BOT #1";
-        if (s == "[SYSTEM]") return u8"[SİSTEM]";
-
-        if (s == "TEMPLATE CONFIGURATION & MAKER") return u8"ŞABLON AYARLARI VE OLUŞTURUCU";
-        if (s == "Configuration") return u8"Yapılandırma";
-        if (s == "Separate all templates for each instance") return u8"Her bot için şablonları ayrı tut";
-        if (s == "Template Maker") return u8"Şablon Oluşturucu";
-        if (s == "CREATE YOUR OWN TEMPLATES") return u8"KENDİ ŞABLONLARINI OLUŞTUR";
-        if (s == "TAKE SCREENSHOT (Save to /templates)") return u8"EKRAN GÖRÜNTÜSÜ AL (/templates'e kaydet)";
-
-        if (s == "Username:") return u8"Kullanıcı Adı:";
-        if (s == "Password:") return u8"Şifre:";
-        if (s == "Your Hardware ID (HWID):") return u8"Donanım Kimliğiniz (HWID):";
-        if (s == "Copy HWID") return u8"HWID Kopyala";
-        if (s == "LOGIN TO DASHBOARD") return u8"PANELE GİRİŞ YAP";
-
-        // ==========================================
-        // YENİ EKLENEN DURUM (STATUS) VE LOG KELİMELERİ
-        // ==========================================
-// --- NXRTH GÜNCEL SİSTEM MESAJLARI VE LOGLAR ---
-        if (s == "ACCEPTING FRIEND REQUEST") return u8"ARKADAŞLIK İSTEĞİ KABUL EDİLİYOR";
-        if (s == "Account Cycle Done. Moving to next...") return u8"Hesap Döngüsü Tamamlandı. Sıradakine geçiliyor...";
-        if (s == "Account Leveled Up! Claiming rewards...") return u8"Hesap Seviye Atladı! Ödüller toplanıyor...";
-        if (s == "Account Saved & Encrypted Successfully.") return u8"Hesap Başarıyla Kaydedildi ve Şifrelendi.";
-        if (s == "Account Switched. Game Restarting.") return u8"Hesap Değiştirildi. Oyun Yeniden Başlatılıyor.";
-        if (s == "Account successfully moved!") return u8"Hesap başarıyla taşındı!";
-        if (s == "All retries failed. Moving on.") return u8"Tüm denemeler başarısız oldu. Devam ediliyor.";
-        if (s == "All visible fields are planted successfully.") return u8"Görünürdeki tüm tarlalar başarıyla ekildi.";
-        if (s == "App Launched.") return u8"Uygulama Başlatıldı.";
-        if (s == "Auto Tom cycle complete! He will wake up in 2 hours.") return u8"Otomatik Tom döngüsü tamamlandı! 2 saat içinde uyanacak.";
-        if (s == "BOT Started.") return u8"BOT Başlatıldı.";
-        if (s == "BOT Stopped by User.") return u8"BOT Kullanıcı Tarafından Durduruldu.";
-        if (s == "BOT Stopped via Emergency Remote Command.") return u8"BOT Acil Uzaktan Komut ile Durduruldu.";
-        if (s == "BOT Stopped via Remote Command.") return u8"BOT Uzaktan Komut ile Durduruldu.";
-        if (s == "Bot Started.") return u8"Bot Başlatıldı.";
-        if (s == "Checking Auto Tom...") return u8"Otomatik Tom Kontrol Ediliyor...";
-        if (s == "Checking Game Load...") return u8"Oyunun Yüklenmesi Bekleniyor...";
-        if (s == "Checking Harvest...") return u8"Hasat Kontrol Ediliyor...";
-        if (s == "Checking Plant...") return u8"Ekim Kontrol Ediliyor...";
-        if (s == "Checking Sales...") return u8"Satışlar Kontrol Ediliyor...";
-        if (s == "Closing all menus to return to main screen...") return u8"Ana ekrana dönmek için tüm menüler kapatılıyor...";
-        if (s == "Closing stuck menu before returning to farm...") return u8"Çiftliğe dönmeden önce takılan menü kapatılıyor...";
-        if (s == "Collecting Items...") return u8"Eşyalar Toplanıyor...";
-        if (s == "Collecting coins...") return u8"Altınlar toplanıyor...";
-        if (s == "Cycle Done") return u8"Döngü Tamamlandı";
-        if (s == "Cycle End Cleanup...") return u8"Döngü Sonu Temizliği...";
-        if (s == "Data wiped successfully! Launch game to start fresh.") return u8"Veriler başarıyla silindi! Sıfırdan başlamak için oyunu başlatın.";
-        if (s == "Decrypting & Switching Account...") return u8"Şifre Çözülüyor & Hesap Değiştiriliyor...";
-        if (s == "Deploying Auto Tom...") return u8"Otomatik Tom Gönderiliyor...";
-        if (s == "Detecting Input...") return u8"Giriş Bekleniyor...";
-        if (s == "ERROR: Shop not found or didn") return u8"HATA: Dükkan bulunamadı veya açılmadı";
-        if (s == "ERROR: Target not found on Radar!") return u8"HATA: Hedef Radarda bulunamadı!";
-        if (s == "ERROR: Waited 45s but Farm bot got stuck. Going home.") return u8"HATA: 45sn beklendi ama bot takıldı. Eve dönülüyor.";
-        if (s == "ERROR: friends.png NOT FOUND on screen!") return u8"HATA: friends.png ekranda BULUNAMADI!";
-        if (s == "Emergency Sales...") return u8"Acil Durum Satışları...";
-        if (s == "Entered the shop. Initiating Heist Session...") return u8"Dükkana girildi. TRANSFER Oturumu Başlatılıyor...";
-        if (s == "Entering Sales Mode...") return u8"Satış Moduna Giriliyor...";
-        if (s == "Error: Config file missing!") return u8"Hata: Config dosyası eksik!";
-        if (s == "Error: Could not read list. Check ADB path.") return u8"Hata: Liste okunamadı. ADB yolunu kontrol edin.";
-        if (s == "Error: File decryption failed! Corrupted data.") return u8"Hata: Dosya şifresi çözülemedi! Bozuk veri.";
-        if (s == "Error: Slot file empty or missing!") return u8"Hata: Slot dosyası boş veya eksik!";
-        if (s == "Error: languages.csv missing in injecthacks folder!") return u8"Hata: injecthacks klasöründe languages.csv eksik!";
-        if (s == "Error: themes.csv missing in folder!") return u8"Hata: klasörde themes.csv eksik!";
-        if (s == "Executing Webhook Routine (Checking for Transfer)...") return u8"Webhook Rutini Çalıştırılıyor (Transfer Kontrolü)...";
-        if (s == "Extracting Profile Data...") return u8"Profil Verileri Çıkarılıyor...";
-        if (s == "Failed to open shop menu. Skipping sales.") return u8"Dükkan menüsü açılamadı. Satışlar atlanıyor.";
-        if (s == "Failed. Defaulting to /dev/input/event1") return u8"Başarısız. Varsayılan /dev/input/event1 kullanılıyor";
-        if (s == "Field position mapped and saved!") return u8"Tarla konumu haritalandı ve kaydedildi!";
-        if (s == "Files Injected Successfully!") return u8"Dosyalar Başarıyla Enjekte Edildi!";
-        if (s == "Focusing on search text box...") return u8"Arama metin kutusuna odaklanılıyor...";
-        if (s == "Font Hack Injected! Start game manually.") return u8"Font Hilesi Enjekte Edildi! Oyunu manuel olarak başlatın.";
-        if (s == "Friend request accepted! Moving directly to infiltration...") return u8"Arkadaşlık isteği kabul edildi! Doğrudan sızma işlemine geçiliyor...";
-        if (s == "Friend request sent successfully!") return u8"Arkadaşlık isteği başarıyla gönderildi!";
-        if (s == "Friend request signal received. Accepting...") return u8"Arkadaşlık isteği sinyali alındı. Kabul ediliyor...";
-        if (s == "Game Loaded! Mailbox found.") return u8"Oyun Yüklendi! Posta kutusu bulundu.";
-        if (s == "Game Ready.") return u8"Oyun Hazır.";
-        if (s == "Grown crops detected via Color! Opening sickle menu...") return u8"Büyümüş ekinler Renk ile tespit edildi! Tırpan menüsü açılıyor...";
-        if (s == "HEIST ABORTED: Shop is completely full!") return u8"TRANSFER İPTAL: Dükkan tamamen dolu!";
-        if (s == "HEIST ABORTED: Storage bot cancelled the operation!") return u8"TRANSFER İPTAL: Depo botu işlemi iptal etti!";
-        if (s == "HEIST ABORTED: Storage bot failed to infiltrate!") return u8"TRANSFER İPTAL: Depo botu sızmayı başaramadı!";
-        if (s == "HEIST ERROR: Could not verify shop is open after multiple tries!") return u8"TRANSFER HATASI: Defalarca denemeye rağmen dükkanın açık olduğu doğrulanamadı!";
-        if (s == "HEIST ERROR: Storage bot didn") return u8"TRANSFER HATASI: Depo botu onaylamadı";
-        if (s == "HEIST FAILED: Could not send request.") return u8"TRANSFER BAŞARISIZ: İstek gönderilemedi.";
-        if (s == "HEIST: All items transferred. Telling Storage Bot to go home.") return u8"TRANSFER: Tüm eşyalar transfer edildi. Depo Botuna eve dönmesi söyleniyor.";
-        if (s == "HEIST: Friendship accepted! Closing menus and re-entering shop...") return u8"TRANSFER: Arkadaşlık kabul edildi! Menüler kapatılıp dükkana tekrar giriliyor...";
-        if (s == "HEIST: I have more items! Telling Storage Bot to wait...") return u8"TRANSFER: Daha fazla eşyam var! Depo Botuna beklemesi söyleniyor...";
-        if (s == "HEIST: Item Listed! GO GO GO!") return u8"TRANSFER: Eşya Listelendi! KOŞ KOŞ KOŞ!";
-        if (s == "HEIST: Not friends with storage. Initiating handshake...") return u8"TRANSFER: Depo ile arkadaş değiliz. El sıkışma başlatılıyor...";
-        if (s == "HEIST: Shop didn") return u8"TRANSFER: Dükkan açılmadı";
-        if (s == "HEIST: Shop found, tapping...") return u8"TRANSFER: Dükkan bulundu, tıklanıyor...";
-        if (s == "HEIST: Shop not visible yet, waiting...") return u8"TRANSFER: Dükkan henüz görünmüyor, bekleniyor...";
-        if (s == "HEIST: Shop verified as open!") return u8"TRANSFER: Dükkanın açık olduğu doğrulandı!";
-        if (s == "HEIST: Transfer complete. Collecting coins...") return u8"TRANSFER: Transfer tamamlandı. Altınlar toplanıyor...";
-        if (s == "Harvest interrupted by SILO FULL! Forcing emergency sales...") return u8"SILO DOLU olduğu için hasat kesintiye uğradı! Acil durum satışları zorlanıyor...";
-        if (s == "Heist Failed! Seller didn") return u8"TRANSFER Başarısız! Satıcı listelemedi";
-        if (s == "Heist Successful! Item secured.") return u8"TRANSFER Başarılı! Eşya güvende.";
-        if (s == "INFILTRATING: ") return u8"SIZILIYOR: ";
-        if (s == "ITEM LISTED! Waiting 800ms for network sync...") return u8"EŞYA LİSTELENDİ! Ağ senkronizasyonu için 800ms bekleniyor...";
-        if (s == "Initiating Auto Tom sequence...") return u8"Otomatik Tom sekansı başlatılıyor...";
-        if (s == "Injecting NXRTH Font & Language Hack...") return u8"NXRTH Font & Dil Hilesi Enjekte Ediliyor...";
-        if (s == "Injecting important files for hacks...") return u8"Hileler için önemli dosyalar enjekte ediliyor...";
-        if (s == "Item Sold.") return u8"Eşya Satıldı.";
-        if (s == "LISTENING FOR SIGNALS") return u8"SİNYALLER DİNLENİYOR";
-        if (s == "Launching Application...") return u8"Uygulama Başlatılıyor...";
-        if (s == "No crops to sell.") return u8"Satılacak ekin yok.";
-        if (s == "No more items to transfer. Finishing heist session.") return u8"Aktarılacak başka eşya yok. TRANSFER oturumu bitiriliyor.";
-        if (s == "Not enough coins for Max Stack! Falling back to Mid...") return u8"Maksimum yığın için yeterli altın yok! Ortaya düşülüyor...";
-        if (s == "Opening Tom Boxes...") return u8"Tom Kutuları Açılıyor...";
-        if (s == "Optimization Applied. Restarting Game.") return u8"Optimizasyon Uygulandı. Oyun Yeniden Başlatılıyor.";
-        if (s == "Optimizing View Distance...") return u8"Görüş Mesafesi Optimize Ediliyor...";
-        if (s == "Performing deep system cleanup to prevent Game Not Responding Error...") return u8"Oyun Yanıt Vermiyor Hatasını önlemek için derin sistem temizliği yapılıyor...";
-        if (s == "Placing Advertisement...") return u8"İlan Veriliyor...";
-        if (s == "Plant incomplete or failed. Suspecting false positive or stuck menu. Retrying...") return u8"Ekim tamamlanmadı veya başarısız oldu. Yanlış algılama veya takılı menüden şüpheleniliyor. Tekrar deneniyor...";
-        if (s == "Purchase confirmed! Waiting 30s for Tom to deliver...") return u8"Satın alma onaylandı! Tom'un teslimatı için 30sn bekleniyor...";
-        if (s == "Put on sale button not found.") return u8"Satışa koy butonu bulunamadı.";
-        if (s == "RADAR ERROR: Name found but acceptfq.png missing on that row!") return u8"RADAR HATASI: İsim bulundu ama o satırda acceptfq.png eksik!";
-        if (s == "RADAR ERROR: Target [") return u8"RADAR HATASI: Hedef [";
-        if (s == "RADAR: Green tick matched with name! Accepting...") return u8"RADAR: Yeşil tik isimle eşleşti! Kabul ediliyor...";
-        if (s == "RADAR: Initializing System...") return u8"RADAR: Sistem Başlatılıyor...";
-        if (s == "RADAR: Mode 0 Active. Switching to ") return u8"RADAR: Mod 0 Aktif. Şuraya geçiliyor: ";
-        if (s == "RADAR: Mode 1 Active. Scanning ") return u8"RADAR: Mod 1 Aktif. Taranıyor: ";
-        if (s == "RADAR: Request found! Scanning for green tick on the same row...") return u8"RADAR: İstek bulundu! Aynı satırda yeşil tik aranıyor...";
-        if (s == "RADAR: Scanning for -> [") return u8"RADAR: Şunun için taranıyor -> [";
-        if (s == "RADAR: Skipping menu open, already inside Friend Book.") return u8"RADAR: Menü açma atlanıyor, zaten Arkadaş Kitabının içinde.";
-        if (s == "RADAR: Target found! Double clicking: [") return u8"RADAR: Hedef bulundu! Çift tıklanıyor: [";
-        if (s == "RADAR: Target not found here. Scrolling 50 pixels down...") return u8"RADAR: Hedef burada bulunamadı. 50 piksel aşağı kaydırılıyor...";
-        if (s == "RADIO: Transfer triggered! (") return u8"TELSİZ: Transfer tetiklendi! (";
-        if (s == "Reading Account Profile Data...") return u8"Hesap Profil Verileri Okunuyor...";
-        if (s == "Remote Command: ") return u8"Uzaktan Komut: ";
-        if (s == "Remote Start: Waking up Emulator...") return u8"Uzaktan Başlatma: Emülatör Uyandırılıyor...";
-        if (s == "Removing Winter Theme...") return u8"Kış Teması Kaldırılıyor...";
-        if (s == "Resuming Harvest...") return u8"Hasada Devam Ediliyor...";
-        if (s == "Retrying Harvest...") return u8"Hasat Tekrar Deneniyor...";
-        if (s == "Retrying Plant...") return u8"Ekim Tekrar Deneniyor...";
-        if (s == "Returning to Home Base...") return u8"Ana Üsse Dönülüyor...";
-        if (s == "Returning to farm to complete the interrupted harvest...") return u8"Yarıda kesilen hasadı tamamlamak için çiftliğe dönülüyor...";
-        if (s == "Rotation Delta Report Sent!") return u8"Döngü Delta Raporu Gönderildi!";
-        if (s == "SIGNAL RECEIVED! Target: [") return u8"SİNYAL ALINDI! Hedef: [";
-        if (s == "SIGNAL RECEIVED: Farm bot has more items! Waiting in shop...") return u8"SİNYAL ALINDI: Farm botunda daha fazla eşya var! Dükkanda bekleniyor...";
-        if (s == "SILO FULL DETECTED! Harvest interrupted.") return u8"SİLO DOLU TESPİT EDİLDİ! Hasat kesintiye uğradı.";
-        if (s == "Save Failed. Check Settings.") return u8"Kaydetme Başarısız. Ayarları Kontrol Edin.";
-        if (s == "Saved location missing, searching crate again...") return u8"Kayıtlı konum eksik, kasa tekrar aranıyor...";
-        if (s == "Saved location missing, searching crate to collect...") return u8"Kayıtlı konum eksik, toplamak için kasa aranıyor...";
-        if (s == "Saving & Encrypting Account Data...") return u8"Hesap Verileri Kaydediliyor & Şifreleniyor...";
-        if (s == "Scanning Fields...") return u8"Tarlalar Taranıyor...";
-        if (s == "Scanning for Grown Crops...") return u8"Büyümüş Ekinler Taranıyor...";
-        if (s == "Screenshot failed: Empty frame.") return u8"Ekran görüntüsü başarısız: Boş kare.";
-        if (s == "Seed Found. Calculating boundary box...") return u8"Tohum Bulundu. Sınır kutusu hesaplanıyor...";
-        if (s == "Seed menu NOT opened or seed missing. Breaking plant loop.") return u8"Tohum menüsü AÇILMADI veya tohum eksik. Ekim döngüsü kırılıyor.";
-        if (s == "Sending friend request to Storage (") return u8"Depoya arkadaşlık isteği gönderiliyor (";
-        if (s == "Settings saved to nxrth_config.ini") return u8"Ayarlar nxrth_config.ini dosyasına kaydedildi";
-        if (s == "Shop is full.") return u8"Dükkan dolu.";
-        if (s == "Sickle Found! Calculating harvest zone...") return u8"Tırpan Bulundu! Hasat bölgesi hesaplanıyor...";
-        if (s == "Single Account Cycle Done. Waiting for crops...") return u8"Tek Hesap Döngüsü Tamamlandı. Ekinler için bekleniyor...";
-        if (s == "Single Account Mode") return u8"Tek Hesap Modu";
-        if (s == "Single Account Mode Active.") return u8"Tek Hesap Modu Aktif.";
-        if (s == "Single mode auto-detected. Skipping game restart.") return u8"Tek hesap modu otomatik algılandı. Oyun yeniden başlatması atlanıyor.";
-        if (s == "Skipped Sales (Random)") return u8"Satışlar Atlandı (Rastgele)";
-        if (s == "Skipping normal sales check due to Emergency Sales.") return u8"Acil Durum Satışları nedeniyle normal satış kontrolü atlanıyor.";
-        if (s == "Starting Emulator Environment...") return u8"Emülatör Ortamı Başlatılıyor...";
-        if (s == "Still poor! Falling back to Min Stack...") return u8"Hala fakiriz! Minimum yığına düşülüyor...";
-        if (s == "Storage Auto-Transfer Activated. Listening on encrypted radio channel...") return u8"Depo Otomatik Transferi Etkinleştirildi. Şifreli telsiz kanalında dinleniyor...";
-        if (s == "Storage Auto-Transfer Mode Halted.") return u8"Depo Otomatik Transfer Modu Durduruldu.";
-        if (s == "Storage Master is online. Waiting for signals...") return u8"Depo Yöneticisi çevrimiçi. Sinyaller bekleniyor...";
-        if (s == "Swapper Error: Source and Destination cannot be the same!") return u8"Değiştirici Hatası: Kaynak ve Hedef aynı olamaz!";
-        if (s == "Swapper Error: Source slot is empty!") return u8"Değiştirici Hatası: Kaynak slotu boş!";
-        if (s == "TARGET LOCKED! Applying +30 X Offset & Executing Snipe...") return u8"HEDEF KİLİTLENDİ! +30 X Ofseti Uygulanıyor & Keskin Nişancı atışı yapılıyor...";
-        if (s == "Timeout (Mailbox not found). Skipping account.") return u8"Zaman Aşımı (Posta kutusu bulunamadı). Hesap atlanıyor.";
-        if (s == "Tom contract expired! Auto Tom disabled.") return u8"Tom kontratı sona erdi! Otomatik Tom devre dışı bırakıldı.";
-        if (s == "Tom delivered! Collecting items...") return u8"Tom teslim etti! Eşyalar toplanıyor...";
-        if (s == "Tom deployed. Waiting 30s for him to return...") return u8"Tom gönderildi. Dönmesi için 30sn bekleniyor...";
-        if (s == "Tom is back! Clicking saved Crate location...") return u8"Tom döndü! Kaydedilen Kasa konumuna tıklanıyor...";
-        if (s == "Tom menu failed to open after 3 retries! Aborting sequence.") return u8"Tom menüsü 3 denemeden sonra açılamadı! Sekans iptal ediliyor.";
-        if (s == "WAITING FRIEND ACCEPT") return u8"ARKADAŞLIK KABULÜ BEKLENİYOR";
-        if (s == "WAITING STORAGE BOSS") return u8"DEPO PATRONU BEKLENİYOR";
-        if (s == "WARNING: home.png not found! Using fallback coordinate.") return u8"UYARI: home.png bulunamadı! Yedek koordinat kullanılıyor.";
-        if (s == "Waking up Minitouch agent and opening ports...") return u8"Minitouch ajanı uyandırılıyor ve portlar açılıyor...";
-        if (s == "Winter Theme Removed! Start game manually.") return u8"Kış Teması Kaldırıldı! Oyunu manuel olarak başlatın.";
-        if (s == "Wiping game data to create new account...") return u8"Yeni hesap oluşturmak için oyun verileri siliniyor...";
-        if (s == "[ERROR] Minitouch connection failed!") return u8"[HATA] Minitouch bağlantısı başarısız oldu!";
-        if (s == "[INFO] Executing DENSE GRID Gesture...") return u8"[BİLGİ] Kaydırma Hareketi çalıştırılıyor...";
-        if (s == "[INFO] Executing DYNAMIC GRID Sweep...") return u8"[BİLGİ] DİNAMİK IZGARA Taraması çalıştırılıyor...";
-        if (s == "[SUCCESS] Dynamic Grid complete!") return u8"[BAŞARILI] Dinamik Izgara tamamlandı!";
-        if (s == "[SUCCESS] Grid Sweep  completed seamlessly!") return u8"[BAŞARILI] Kaydırma sorunsuzca tamamlandı!";
-        if (s == "Want to ask something? ping me @inna in server. i will reply asap.") return u8"Bir şey sormak ister misin? Sunucuda bana (@inna) ping at. En kısa sürede cevap veririm.";
-        if (s == "1. Initial Setup & Minitouch") return u8"1. İlk Kurulum & Minitouch";
-        if (s == "Before starting, you must click Inject Important Files. Without this you won't be able to use the bot. it injects Minitouch, Zoom, Font, Field color changer all in one.") return u8"Başlamadan önce Inject Important Files butonuna tıklamalısınız. Bu olmadan botu kullanamazsınız. Minitouch, Zoom, Font ve Tarla rengi değiştiriciyi tek seferde enjekte eder.";
-        if (s == "2. Bot Manager & Accounts") return u8"2. Bot Yöneticisi & Hesaplar";
-        if (s == "Modes: Single Account Mode: It just plants, harvests, sells and repeats. Multi Account Mode: Bot Plants, Harvests, sells, changes account, repeats. After all accounts done, return to first account and so on.") return u8"Modlar: Tek Hesap Modu: Sadece eker, biçer, satar ve tekrarlar. Çoklu Hesap Modu: Eker, biçer, satar, hesap değiştirir, tekrarlar. Tüm hesaplar bittikten sonra ilk hesaba döner ve devam eder.";
-        if (s == "To enable this you must Save your accounts. Enables automatically.") return u8"Bunu etkinleştirmek için hesaplarınızı Kaydetmelisiniz (Save). Otomatik olarak etkinleşir.";
-        if (s == "How to save account : Create New account in Account management tab, After skipping tutorials and getting to farm level 7, Press \"Save Slot Data\".") return u8"Hesap nasıl kaydedilir: Hesap yönetimi sekmesinde Yeni hesap oluşturun, eğitimleri atlayıp 7. seviyeye geldikten sonra \"Save Slot Data\"ya basın.";
-        if (s == "If you want to change accounts manually you can press \"Load Slot Data\". Dont press this if you haven't saved account yet.") return u8"Hesapları manuel olarak değiştirmek isterseniz \"Load Slot Data\"ya basabilirsiniz. Hesabı henüz kaydetmediyseniz buna basmayın.";
-        if (s == "IMPORTANT NOTE: DO NOT SAVE SUPERCELL ID ACCOUNTS BECAUSE YOU WILL GET COOKIES POP-UP AND BOT WONT WORK.") return u8"ÖNEMLİ NOT: SUPERCELL ID HESAPLARINI KAYDETMEYİN ÇÜNKÜ ÇEREZLER PENCERESİ ÇIKAR VE BOT ÇALIŞMAZ.";
-        if (s == "3. Auto Tom") return u8"3. Auto Tom";
-        if (s == "Read These Carefully or your bot can break.") return u8"Bunları dikkatlice okuyun yoksa botunuz bozulabilir.";
-        if (s == "To use Auto Tom, make sure Tom is not on Cooldown.") return u8"Auto Tom'u kullanmak için Tom'un bekleme süresinde (Cooldown) olmadığından emin olun.";
-        if (s == "if bot can't find tom's crate, then make your own template.") return u8"Eğer bot Tom'un kasasını bulamazsa, kendi şablonunuzu (template) oluşturun.";
-        if (s == "4. Auto Transfer Bem/Sem") return u8"4. Otomatik Transfer Bem/Sem";
-        if (s == "You have to enable instance 6 and put an account there. it will Work as storage account there.") return u8"6. emülatörü (instance) aktif etmeli ve oraya bir hesap koymalısınız. Orada depo hesabı olarak çalışacaktır.";
-        if (s == "DONT ADD FRIEND YOUR BOTS MANUALLY. yes, you heard it. IF you already added your bots, please remove them. my bot will automatically add friend.") return u8"BOTLARINIZI MANUEL OLARAK ARKADAŞ EKLEMEYİN. Evet, yanlış duymadınız. EĞER botlarınızı zaten eklediyseniz, lütfen silin. Botum otomatik olarak arkadaş ekleyecektir.";
-        if (s == "TEST IF FARM NAME READING FUNCTION WORKS PROPERLY. IF BOTS ADDED EACH OTHER AS FRIENDS WITHOUT PROBLEM, THAT MEANS EVERYTHING IS FINE. IF NOT, CHANGE YOUR FARM NAME TO SOMETHING READABLE (IF BOT READED YOUR FARM NAME WRONG, PLEASE OPEN NXRTH_CONFIG.INI AND DELETE FARM NAME INFO).") return u8"FARM İSMİ OKUMA FONKSİYONUNUN DÜZGÜN ÇALIŞIP ÇALIŞMADIĞINI TEST EDİN. EĞER BOTLAR BİRBİRİNİ SORUNSUZ ARKADAŞ EKLERSE, HER ŞEY YOLUNDA DEMEKTİR. EĞER EKLEMEZSE, FARM İSMİNİZİ OKUNABİLİR BİR ŞEYE ÇEVİRİN (EĞER BOT FARM İSMİNİZİ YANLIŞ OKUDUYSA, LÜTFEN NXRTH_CONFIG.INI DOSYASINI AÇIN VE FARM İSMİ BİLGİSİNİ SİLİN).";
-        if (s == "5. Remote & Webhook") return u8"5. Uzaktan Kontrol & Webhook";
-        if (s == "You can always configure Remote & Webhook feature in Remote & Webhook Tab.") return u8"Remote & Webhook özelliğini her zaman Remote & Webhook sekmesinden yapılandırabilirsiniz.";
-        if (s == "Type !id in my server to get your Discord id. To use Remote Control in Discord, You have to enter your discord id and Press \"Save Settings\" in Settings Tab.") return u8"Discord id'nizi almak için sunucumda !id yazın. Discord'da Uzaktan Kontrolü kullanmak için, discord id'nizi girmeli ve Ayarlar sekmesinde \"Save Settings\"e basmalısınız.";
-        if (s == "Current remote controls are:") return u8"Mevcut uzaktan kontroller şunlardır:";
-        if (s == "[Note: <instanceid> is 1,2,3,4,5,6. For example 1 returns screenshot of first Memu.]") return u8"[Not: <instanceid> 1,2,3,4,5,6'dır. Örneğin 1, ilk Memu'nun ekran görüntüsünü döndürür.]";
-        if (s == "!status returns status of the bots to the Webhook.") return u8"!status, botların durumunu Webhook'a döndürür.";
-        if (s == "!start <instanceid> (starts memu + hayday + bot. if both memu and hayday already open its ok.)") return u8"!start <instanceid> (memu + hayday + botu başlatır. memu ve hayday zaten açıksa sorun olmaz.)";
-        if (s == "!ss <instanceid> (sends screenshot of the instance to the webhook address.)") return u8"!ss <instanceid> (instance'ın ekran görüntüsünü webhook adresine gönderir.)";
-        if (s == "!ssall sends screenshots of the active instances at the same time.") return u8"!ssall aktif instance'ların ekran görüntülerini aynı anda gönderir.";
-        if (s == "!stop <instanceid> stops the bot.") return u8"!stop <instanceid> botu durdurur.";
-        if (s == "!stopall This is emergency command. Stops all bots at once.") return u8"!stopall Bu acil durum komutudur. Tüm botları aynı anda durdurur.";
-        if (s == "For Telegram:") return u8"Telegram için:";
-        if (s == "Create your own telegram bot. You can search on Google for this.") return u8"Kendi telegram botunuzu oluşturun. Bunun için Google'da arama yapabilirsiniz.";
-        if (s == "Enter your telegram bot token and chat id") return u8"Telegram bot token'ınızı ve chat id'nizi girin";
-        if (s == "Press Save settings in Settings tab.") return u8"Ayarlar sekmesinde Save settings'e basın.";
-        if (s == "Enabling Webhook only sends status of the barn after each sale cycle.") return u8"Webhook'u etkinleştirmek sadece her satış döngüsünden sonra ahırın durumunu gönderir.";
-        if (s == "My number reading can make mistakes, you better enable send screenshot with webhook if you really care.") return u8"Sayı okumam hatalar yapabilir, eğer gerçekten önemsiyorsanız webhook ile ekran görüntüsü gönder seçeneğini etkinleştirmeniz daha iyi olur.";
-    }
-
-    // ==========================================================
-    // 2 - İSPANYOLCA (SPANISH)
-    // ==========================================================
-    else if (g_Language == 2) {
-        if (s == "DASHBOARD") return u8"PANEL DE CONTROL";
-        if (s == "BOT MANAGER") return u8"GESTOR DE BOTS";
-        if (s == "REMOTE & WEBHOOK") return u8"CONTROL REMOTO Y WEBHOOK";
-        if (s == "SETTINGS") return u8"AJUSTES";
-        if (s == "LOGS") return u8"REGISTROS";
-        if (s == "TEMPLATES") return u8"PLANTILLAS";
-        if (s == "Active Instances: %d/4") return u8"Instancias activas: %d/4";
-        if (s == "User: %s") return u8"Usuario: %s";
-        if (s == "License Expiring! (%d Days)") return u8"¡La licencia expira! (%d días)";
-        if (s == "Days Left: %d") return u8"Días restantes: %d";
-
-        if (s == "INSTANCES OVERVIEW") return u8"VISIÓN GENERAL DE INSTANCIAS";
-        if (s == "TOTAL RUNTIME") return u8"TIEMPO TOTAL DE EJECUCIÓN";
-        if (s == "TOTAL HARVEST / SALES") return u8"COSECHAS / VENTAS TOTALES";
-        if (s == "TOTAL COINS") return u8"MONEDAS TOTALES";
-        if (s == "TOTAL DIAMONDS") return u8"DIAMANTES TOTALES";
-        if (s == "INSTANCE #%d") return u8"INSTANCIA #%d";
-        if (s == "[ONLINE]") return u8"[EN LÍNEA]";
-        if (s == "[OFFLINE]") return u8"[DESCONECTADO]";
-        if (s == "ADB: %s") return u8"Puerto ADB: %s";
-        if (s == "Slot: %s") return u8"Ranura: %s";
-        if (s == "Farm: %s | Lvl: %d") return u8"Granja: %s | Nivel: %d";
-        if (s == "Tag: %s") return u8"Etiqueta: %s";
-        if (s == "Barn: Bolt: %d | Tape: %d | Plank: %d") return u8"Granero: Perno: %d | Cinta: %d | Tabla: %d";
-        if (s == "Silo: Nail: %d | Screw: %d | Panel: %d") return u8"Silo: Clavo: %d | Tornillo: %d | Panel: %d";
-        if (s == "Harvests: %d | Sales: %d") return u8"Cosechas: %d | Ventas: %d";
-        if (s == "Status: %s") return u8"Estado: %s";
-        if (s == "Enable this instance in 'Bot Manager'") return u8"Habilite esta instancia en 'Gestor de Bots'";
-
-        if (s == "BOT INSTANCE MANAGER") return u8"GESTOR DE INSTANCIAS DE BOTS";
-        if (s == "Instance #") return u8"Bot #";
-        if (s == "CONNECTION SETTINGS") return u8"AJUSTES DE CONEXIÓN";
-        if (s == "Enable This Instance") return u8"Habilitar este bot";
-        if (s == "(Target Port: %s)") return u8"(Puerto destino: %s)";
-        if (s == "ADB Serial/Port##adb") return u8"Puerto/Serie ADB##adb";
-        if (s == "Example: 127.0.0.1:21503 for MEmu 1") return u8"Ejemplo: 127.0.0.1:21503 para MEmu 1";
-        if (s == "Input Device (Touchscreen):") return u8"Dispositivo de entrada (Táctil):";
-        if (s == "VM Name##vm") return u8"Nombre de VM##vm";
-        if (s == "Auto Detect") return u8"Autodetectar";
-        if (s == "TOOLS & DIAGNOSTICS") return u8"HERRAMIENTAS Y PRUEBAS";
-        if (s == "Select Mode:") return u8"Modo de cultivo:";
-        if (s == "Wheat (2m)") return u8"Trigo (2m)";
-        if (s == "Corn (5m)") return u8"Maíz (5m)";
-        if (s == "Carrot (10m)") return u8"Zanahoria (10m)";
-        if (s == "Soybean (20m)") return u8"Soja (20m)";
-        if (s == "Sugarcane (30m)") return u8"Caña de Azúcar (30m)";
-        if (s == "TEST SEED") return u8"PROBAR SEMILLA";
-        if (s == "TEST GROWN") return u8"PROBAR CULTIVO";
-        if (s == "TEST FIELD") return u8"PROBAR CAMPO";
-        if (s == "TEST SICKLE") return u8"PROBAR HOZ";
-
-        if (s == "ACCOUNT MANAGER") return u8"GESTOR DE CUENTAS";
-        if (s == "Slot ") return u8"Ranura ";
-        if (s == " (SELECTED)") return u8" (SELECCIONADA)";
-        if (s == " [SAVED]") return u8" [GUARDADA]";
-        if (s == "Actions:") return u8"Acciones:";
-        if (s == "Slot Selector") return u8"Selector de Ranura";
-        if (s == "SAVE SLOT DATA") return u8"GUARDAR DATOS DE RANURA";
-        if (s == "LOAD SLOT DATA") return u8"CARGAR DATOS DE RANURA";
-        if (s == "LAUNCH MEMU + HAY DAY") return u8"INICIAR MEMU + HAY DAY";
-        if (s == "START BOT") return u8"INICIAR BOT";
-        if (s == "STOP BOT") return u8"DETENER BOT";
-
-        if (s == "Account Management") return u8"Gestión de Cuentas";
-        if (s == "TRANSFER ACCOUNTS BETWEEN INSTANCES") return u8"TRANSFERIR CUENTAS ENTRE INSTANCIAS";
-        if (s == "MOVE ACCOUNT") return u8"MOVER CUENTA";
-        if (s == "CREATE NEW ACCOUNT (WIPE GAME DATA)") return u8"CREAR NUEVA CUENTA (BORRAR DATOS)";
-        if (s == "WIPE DATA & CREATE NEW") return u8"BORRAR DATOS Y CREAR NUEVA";
-
-        if (s == "Auto Tom Config") return u8"Configuración Tom";
-        if (s == "AUTOMATED TOM MANAGER") return u8"GESTOR AUTOMÁTICO DE TOM";
-        if (s == "Enable Auto Tom For This Slot") return u8"Habilitar Tom para esta ranura";
-        if (s == "Remaining Hours") return u8"Horas restantes";
-        if (s == "Search Category") return u8"Categoría de Búsqueda";
-        if (s == "Barn") return u8"Granero";
-        if (s == "Silo") return u8"Silo";
-        if (s == "Item Search Name") return u8"Nombre del artículo";
-        if (s == "ACCEPT ITEM NAME") return u8"ACEPTAR NOMBRE";
-
-        if (s == "Farm Inspector") return u8"Inspector de Granja";
-        if (s == "LIVE FARM OVERVIEW & INVENTORY") return u8"VISTA GENERAL EN VIVO E INVENTARIO";
-
-        if (s == "GLOBAL APPLICATION SETTINGS") return u8"AJUSTES GLOBALES DE APLICACIÓN";
-        if (s == "SAVE ALL SETTINGS") return u8"GUARDAR TODOS LOS AJUSTES";
-        if (s == "ADB Executable Path:") return u8"Ruta del ejecutable ADB:";
-        if (s == "MEmu Console Path:") return u8"Ruta de MEmu Console:";
-        if (s == "Browse") return u8"Examinar";
-        if (s == "Browse##memu") return u8"Examinar##memu";
-
-        if (s == "CLEAR LOGS") return u8"LIMPIAR REGISTROS";
-        if (s == "Auto-Scroll") return u8"Desplazamiento auto.";
-        if (s == "Filter:") return u8"Filtro:";
-        if (s == "ALL") return u8"TODOS";
-        if (s == "INST #1") return u8"BOT #1";
-        if (s == "[SYSTEM]") return u8"[SISTEMA]";
-
-        if (s == "TEMPLATE CONFIGURATION & MAKER") return u8"CONFIGURACIÓN Y CREADOR DE PLANTILLAS";
-        if (s == "Configuration") return u8"Configuración";
-        if (s == "Template Maker") return u8"Creador de Plantillas";
-        if (s == "TAKE SCREENSHOT (Save to /templates)") return u8"TOMAR CAPTURA DE PANTALLA";
-
-        if (s == "Username:") return u8"Usuario:";
-        if (s == "Password:") return u8"Contraseña:";
-        if (s == "Your Hardware ID (HWID):") return u8"Tu ID de Hardware (HWID):";
-        if (s == "Copy HWID") return u8"Copiar HWID";
-        if (s == "LOGIN TO DASHBOARD") return u8"INICIAR SESIÓN";
-
-            if (s == "ACCEPTING FRIEND REQUEST") return u8"ACEPTANDO SOLICITUD DE AMISTAD";
-            if (s == "Account Cycle Done. Moving to next...") return u8"Ciclo de Cuenta Terminado. Pasando a la siguiente...";
-            if (s == "Account Leveled Up! Claiming rewards...") return u8"¡Cuenta Subió de Nivel! Reclamando recompensas...";
-            if (s == "Account Saved & Encrypted Successfully.") return u8"Cuenta Guardada y Encriptada con Éxito.";
-            if (s == "Account Switched. Game Restarting.") return u8"Cuenta Cambiada. Reiniciando Juego.";
-            if (s == "Account successfully moved!") return u8"¡Cuenta movida con éxito!";
-            if (s == "All retries failed. Moving on.") return u8"Todos los intentos fallaron. Continuando.";
-            if (s == "All visible fields are planted successfully.") return u8"Todos los campos visibles han sido plantados con éxito.";
-            if (s == "App Launched.") return u8"Aplicación Iniciada.";
-            if (s == "Auto Tom cycle complete! He will wake up in 2 hours.") return u8"¡Ciclo de Auto Tom completado! Se despertará en 2 horas.";
-            if (s == "BOT Started.") return u8"BOT Iniciado.";
-            if (s == "BOT Stopped by User.") return u8"BOT Detenido por el Usuario.";
-            if (s == "BOT Stopped via Emergency Remote Command.") return u8"BOT Detenido por Comando Remoto de Emergencia.";
-            if (s == "BOT Stopped via Remote Command.") return u8"BOT Detenido por Comando Remoto.";
-            if (s == "Bot Started.") return u8"Bot Iniciado.";
-            if (s == "Checking Auto Tom...") return u8"Comprobando Auto Tom...";
-            if (s == "Checking Game Load...") return u8"Comprobando Carga del Juego...";
-            if (s == "Checking Harvest...") return u8"Comprobando Cosecha...";
-            if (s == "Checking Plant...") return u8"Comprobando Siembra...";
-            if (s == "Checking Sales...") return u8"Comprobando Ventas...";
-            if (s == "Closing all menus to return to main screen...") return u8"Cerrando todos los menús para volver a la pantalla principal...";
-            if (s == "Closing stuck menu before returning to farm...") return u8"Cerrando menú atascado antes de volver a la granja...";
-            if (s == "Collecting Items...") return u8"Recolectando Artículos...";
-            if (s == "Collecting coins...") return u8"Recolectando monedas...";
-            if (s == "Cycle Done") return u8"Ciclo Terminado";
-            if (s == "Cycle End Cleanup...") return u8"Limpieza de Fin de Ciclo...";
-            if (s == "Data wiped successfully! Launch game to start fresh.") return u8"¡Datos borrados con éxito! Inicia el juego para empezar de cero.";
-            if (s == "Decrypting & Switching Account...") return u8"Desencriptando y Cambiando Cuenta...";
-            if (s == "Deploying Auto Tom...") return u8"Desplegando Auto Tom...";
-            if (s == "Detecting Input...") return u8"Detectando Entrada...";
-            if (s == "ERROR: Shop not found or didn") return u8"ERROR: Tienda no encontrada o no";
-            if (s == "ERROR: Target not found on Radar!") return u8"¡ERROR: Objetivo no encontrado en el Radar!";
-            if (s == "ERROR: Waited 45s but Farm bot got stuck. Going home.") return u8"ERROR: Esperó 45s pero el bot de granja se atascó. Volviendo a casa.";
-            if (s == "ERROR: friends.png NOT FOUND on screen!") return u8"¡ERROR: friends.png NO ENCONTRADO en la pantalla!";
-            if (s == "Emergency Sales...") return u8"Ventas de Emergencia...";
-            if (s == "Entered the shop. Initiating Heist Session...") return u8"Entró a la tienda. Iniciando Sesión de Transferencia...";
-            if (s == "Entering Sales Mode...") return u8"Entrando en Modo de Ventas...";
-            if (s == "Error: Config file missing!") return u8"¡Error: Falta el archivo de configuración!";
-            if (s == "Error: Could not read list. Check ADB path.") return u8"Error: No se pudo leer la lista. Verifique la ruta de ADB.";
-            if (s == "Error: File decryption failed! Corrupted data.") return u8"¡Error: Falló la desencriptación del archivo! Datos corruptos.";
-            if (s == "Error: Slot file empty or missing!") return u8"¡Error: Archivo de ranura vacío o faltante!";
-            if (s == "Error: languages.csv missing in injecthacks folder!") return u8"¡Error: Falta languages.csv en la carpeta injecthacks!";
-            if (s == "Error: themes.csv missing in folder!") return u8"¡Error: Falta themes.csv en la carpeta!";
-            if (s == "Executing Webhook Routine (Checking for Transfer)...") return u8"Ejecutando Rutina Webhook (Comprobando Transferencia)...";
-            if (s == "Extracting Profile Data...") return u8"Extrayendo Datos de Perfil...";
-            if (s == "Failed to open shop menu. Skipping sales.") return u8"Error al abrir el menú de la tienda. Omitiendo ventas.";
-            if (s == "Failed. Defaulting to /dev/input/event1") return u8"Falló. Volviendo al valor predeterminado /dev/input/event1";
-            if (s == "Field position mapped and saved!") return u8"¡Posición del campo mapeada y guardada!";
-            if (s == "Files Injected Successfully!") return u8"¡Archivos Inyectados con Éxito!";
-            if (s == "Focusing on search text box...") return u8"Enfocándose en el cuadro de búsqueda...";
-            if (s == "Font Hack Injected! Start game manually.") return u8"¡Hack de fuente inyectado! Inicie el juego manualmente.";
-            if (s == "Friend request accepted! Moving directly to infiltration...") return u8"¡Solicitud de amistad aceptada! Pasando directamente a la infiltración...";
-            if (s == "Friend request sent successfully!") return u8"¡Solicitud de amistad enviada con éxito!";
-            if (s == "Friend request signal received. Accepting...") return u8"Señal de solicitud de amistad recibida. Aceptando...";
-            if (s == "Game Loaded! Mailbox found.") return u8"¡Juego Cargado! Buzón encontrado.";
-            if (s == "Game Ready.") return u8"Juego Listo.";
-            if (s == "Grown crops detected via Color! Opening sickle menu...") return u8"¡Cultivos maduros detectados por color! Abriendo menú de la hoz...";
-            if (s == "HEIST ABORTED: Shop is completely full!") return u8"TRANSFERENCIA ABORTADA: ¡La tienda está completamente llena!";
-            if (s == "HEIST ABORTED: Storage bot cancelled the operation!") return u8"TRANSFERENCIA ABORTADA: ¡El bot de almacenamiento canceló la operación!";
-            if (s == "HEIST ABORTED: Storage bot failed to infiltrate!") return u8"TRANSFERENCIA ABORTADA: ¡El bot de almacenamiento falló al infiltrarse!";
-            if (s == "HEIST ERROR: Could not verify shop is open after multiple tries!") return u8"ERROR DE TRANSFERENCIA: ¡No se pudo verificar si la tienda está abierta después de varios intentos!";
-            if (s == "HEIST ERROR: Storage bot didn") return u8"ERROR DE TRANSFERENCIA: El bot de almacenamiento no";
-            if (s == "HEIST FAILED: Could not send request.") return u8"TRANSFERENCIA FALLIDA: No se pudo enviar la solicitud.";
-            if (s == "HEIST: All items transferred. Telling Storage Bot to go home.") return u8"TRANSFERENCIA: Todos los artículos transferidos. Diciendo al Bot de Almacenamiento que vuelva a casa.";
-            if (s == "HEIST: Friendship accepted! Closing menus and re-entering shop...") return u8"TRANSFERENCIA: ¡Amistad aceptada! Cerrando menús y volviendo a entrar a la tienda...";
-            if (s == "HEIST: I have more items! Telling Storage Bot to wait...") return u8"TRANSFERENCIA: ¡Tengo más artículos! Diciendo al Bot de Almacenamiento que espere...";
-            if (s == "HEIST: Item Listed! GO GO GO!") return u8"TRANSFERENCIA: ¡Artículo listado! ¡VAMOS VAMOS VAMOS!";
-            if (s == "HEIST: Not friends with storage. Initiating handshake...") return u8"TRANSFERENCIA: No somos amigos del almacenamiento. Iniciando protocolo...";
-            if (s == "HEIST: Shop didn") return u8"TRANSFERENCIA: La tienda no";
-            if (s == "HEIST: Shop found, tapping...") return u8"TRANSFERENCIA: Tienda encontrada, tocando...";
-            if (s == "HEIST: Shop not visible yet, waiting...") return u8"TRANSFERENCIA: Tienda aún no visible, esperando...";
-            if (s == "HEIST: Shop verified as open!") return u8"TRANSFERENCIA: ¡Tienda verificada como abierta!";
-            if (s == "HEIST: Transfer complete. Collecting coins...") return u8"TRANSFERENCIA: Transferencia completa. Recolectando monedas...";
-            if (s == "Harvest interrupted by SILO FULL! Forcing emergency sales...") return u8"¡Cosecha interrumpida por SILO LLENO! Forzando ventas de emergencia...";
-            if (s == "Heist Failed! Seller didn") return u8"¡Transferencia Fallida! El vendedor no";
-            if (s == "Heist Successful! Item secured.") return u8"¡Transferencia Exitosa! Artículo asegurado.";
-            if (s == "INFILTRATING: ") return u8"INFILTRANDO: ";
-            if (s == "ITEM LISTED! Waiting 800ms for network sync...") return u8"¡ARTÍCULO LISTADO! Esperando 800ms para sincronización de red...";
-            if (s == "Initiating Auto Tom sequence...") return u8"Iniciando secuencia de Auto Tom...";
-            if (s == "Injecting NXRTH Font & Language Hack...") return u8"Inyectando Hack de Fuente y Lenguaje NXRTH...";
-            if (s == "Injecting important files for hacks...") return u8"Inyectando archivos importantes para hacks...";
-            if (s == "Item Sold.") return u8"Artículo Vendido.";
-            if (s == "LISTENING FOR SIGNALS") return u8"ESCUCHANDO SEÑALES";
-            if (s == "Launching Application...") return u8"Iniciando Aplicación...";
-            if (s == "No crops to sell.") return u8"No hay cultivos para vender.";
-            if (s == "No more items to transfer. Finishing heist session.") return u8"No hay más artículos para transferir. Finalizando sesión de transferencia.";
-            if (s == "Not enough coins for Max Stack! Falling back to Mid...") return u8"¡No hay suficientes monedas para la Pila Máxima! Volviendo a la Media...";
-            if (s == "Opening Tom Boxes...") return u8"Abriendo Cajas de Tom...";
-            if (s == "Optimization Applied. Restarting Game.") return u8"Optimización Aplicada. Reiniciando Juego.";
-            if (s == "Optimizing View Distance...") return u8"Optimizando Distancia de Visión...";
-            if (s == "Performing deep system cleanup to prevent Game Not Responding Error...") return u8"Realizando limpieza profunda del sistema para prevenir Error de Juego no Responde...";
-            if (s == "Placing Advertisement...") return u8"Colocando Anuncio...";
-            if (s == "Plant incomplete or failed. Suspecting false positive or stuck menu. Retrying...") return u8"Siembra incompleta o fallida. Sospechando falso positivo o menú atascado. Reintentando...";
-            if (s == "Purchase confirmed! Waiting 30s for Tom to deliver...") return u8"¡Compra confirmada! Esperando 30s para que Tom entregue...";
-            if (s == "Put on sale button not found.") return u8"Botón de poner a la venta no encontrado.";
-            if (s == "RADAR ERROR: Name found but acceptfq.png missing on that row!") return u8"ERROR DE RADAR: ¡Nombre encontrado pero falta acceptfq.png en esa fila!";
-            if (s == "RADAR ERROR: Target [") return u8"ERROR DE RADAR: Objetivo [";
-            if (s == "RADAR: Green tick matched with name! Accepting...") return u8"RADAR: ¡La marca verde coincide con el nombre! Aceptando...";
-            if (s == "RADAR: Initializing System...") return u8"RADAR: Inicializando Sistema...";
-            if (s == "RADAR: Mode 0 Active. Switching to ") return u8"RADAR: Modo 0 Activo. Cambiando a ";
-            if (s == "RADAR: Mode 1 Active. Scanning ") return u8"RADAR: Modo 1 Activo. Escaneando ";
-            if (s == "RADAR: Request found! Scanning for green tick on the same row...") return u8"RADAR: ¡Solicitud encontrada! Escaneando la marca verde en la misma fila...";
-            if (s == "RADAR: Scanning for -> [") return u8"RADAR: Escaneando por -> [";
-            if (s == "RADAR: Skipping menu open, already inside Friend Book.") return u8"RADAR: Omitiendo abrir menú, ya dentro del Libro de Amigos.";
-            if (s == "RADAR: Target found! Double clicking: [") return u8"RADAR: ¡Objetivo encontrado! Haciendo doble clic: [";
-            if (s == "RADAR: Target not found here. Scrolling 50 pixels down...") return u8"RADAR: Objetivo no encontrado aquí. Desplazando 50 píxeles hacia abajo...";
-            if (s == "RADIO: Transfer triggered! (") return u8"RADIO: ¡Transferencia activada! (";
-            if (s == "Reading Account Profile Data...") return u8"Leyendo Datos del Perfil de Cuenta...";
-            if (s == "Remote Command: ") return u8"Comando Remoto: ";
-            if (s == "Remote Start: Waking up Emulator...") return u8"Inicio Remoto: Despertando Emulador...";
-            if (s == "Removing Winter Theme...") return u8"Eliminando Tema de Invierno...";
-            if (s == "Resuming Harvest...") return u8"Reanudando Cosecha...";
-            if (s == "Retrying Harvest...") return u8"Reintentando Cosecha...";
-            if (s == "Retrying Plant...") return u8"Reintentando Siembra...";
-            if (s == "Returning to Home Base...") return u8"Volviendo a la Base Principal...";
-            if (s == "Returning to farm to complete the interrupted harvest...") return u8"Volviendo a la granja para completar la cosecha interrumpida...";
-            if (s == "Rotation Delta Report Sent!") return u8"¡Informe Delta de Rotación Enviado!";
-            if (s == "SIGNAL RECEIVED! Target: [") return u8"¡SEÑAL RECIBIDA! Objetivo: [";
-            if (s == "SIGNAL RECEIVED: Farm bot has more items! Waiting in shop...") return u8"SEÑAL RECIBIDA: ¡El bot de granja tiene más artículos! Esperando en la tienda...";
-            if (s == "SILO FULL DETECTED! Harvest interrupted.") return u8"¡SILO LLENO DETECTADO! Cosecha interrumpida.";
-            if (s == "Save Failed. Check Settings.") return u8"Error al Guardar. Verifique las Configuraciones.";
-            if (s == "Saved location missing, searching crate again...") return u8"Falta la ubicación guardada, buscando la caja de nuevo...";
-            if (s == "Saved location missing, searching crate to collect...") return u8"Falta la ubicación guardada, buscando la caja para recolectar...";
-            if (s == "Saving & Encrypting Account Data...") return u8"Guardando y Encriptando Datos de Cuenta...";
-            if (s == "Scanning Fields...") return u8"Escaneando Campos...";
-            if (s == "Scanning for Grown Crops...") return u8"Escaneando Cultivos Maduros...";
-            if (s == "Screenshot failed: Empty frame.") return u8"Captura de pantalla fallida: Fotograma vacío.";
-            if (s == "Seed Found. Calculating boundary box...") return u8"Semilla Encontrada. Calculando cuadro de límites...";
-            if (s == "Seed menu NOT opened or seed missing. Breaking plant loop.") return u8"Menú de semillas NO abierto o semilla faltante. Rompiendo el ciclo de siembra.";
-            if (s == "Sending friend request to Storage (") return u8"Enviando solicitud de amistad al Almacenamiento (";
-            if (s == "Settings saved to nxrth_config.ini") return u8"Configuraciones guardadas en nxrth_config.ini";
-            if (s == "Shop is full.") return u8"La tienda está llena.";
-            if (s == "Sickle Found! Calculating harvest zone...") return u8"¡Hoz Encontrada! Calculando zona de cosecha...";
-            if (s == "Single Account Cycle Done. Waiting for crops...") return u8"Ciclo de Cuenta Única Terminado. Esperando cultivos...";
-            if (s == "Single Account Mode") return u8"Modo de Cuenta Única";
-            if (s == "Single Account Mode Active.") return u8"Modo de Cuenta Única Activo.";
-            if (s == "Single mode auto-detected. Skipping game restart.") return u8"Modo único detectado automáticamente. Omitiendo reinicio del juego.";
-            if (s == "Skipped Sales (Random)") return u8"Ventas Omitidas (Aleatorio)";
-            if (s == "Skipping normal sales check due to Emergency Sales.") return u8"Omitiendo comprobación normal de ventas debido a Ventas de Emergencia.";
-            if (s == "Starting Emulator Environment...") return u8"Iniciando Entorno del Emulador...";
-            if (s == "Still poor! Falling back to Min Stack...") return u8"¡Todavía pobre! Volviendo a la Pila Mínima...";
-            if (s == "Storage Auto-Transfer Activated. Listening on encrypted radio channel...") return u8"Auto-Transferencia de Almacenamiento Activada. Escuchando en canal de radio encriptado...";
-            if (s == "Storage Auto-Transfer Mode Halted.") return u8"Modo de Auto-Transferencia de Almacenamiento Detenido.";
-            if (s == "Storage Master is online. Waiting for signals...") return u8"El Maestro de Almacenamiento está en línea. Esperando señales...";
-            if (s == "Swapper Error: Source and Destination cannot be the same!") return u8"Error del Intercambiador: ¡Origen y Destino no pueden ser el mismo!";
-            if (s == "Swapper Error: Source slot is empty!") return u8"Error del Intercambiador: ¡La ranura de origen está vacía!";
-            if (s == "TARGET LOCKED! Applying +30 X Offset & Executing Snipe...") return u8"¡OBJETIVO BLOQUEADO! Aplicando compensación de +30 X y ejecutando disparo...";
-            if (s == "Timeout (Mailbox not found). Skipping account.") return u8"Tiempo agotado (Buzón no encontrado). Omitiendo cuenta.";
-            if (s == "Tom contract expired! Auto Tom disabled.") return u8"¡Contrato de Tom expirado! Auto Tom desactivado.";
-            if (s == "Tom delivered! Collecting items...") return u8"¡Tom entregó! Recolectando artículos...";
-            if (s == "Tom deployed. Waiting 30s for him to return...") return u8"Tom desplegado. Esperando 30s para que regrese...";
-            if (s == "Tom is back! Clicking saved Crate location...") return u8"¡Tom ha vuelto! Haciendo clic en la ubicación guardada de la Caja...";
-            if (s == "Tom menu failed to open after 3 retries! Aborting sequence.") return u8"¡El menú de Tom no se pudo abrir después de 3 intentos! Abortando secuencia.";
-            if (s == "WAITING FRIEND ACCEPT") return u8"ESPERANDO ACEPTACIÓN DE AMIGO";
-            if (s == "WAITING STORAGE BOSS") return u8"ESPERANDO AL JEFE DE ALMACENAMIENTO";
-            if (s == "WARNING: home.png not found! Using fallback coordinate.") return u8"ADVERTENCIA: ¡home.png no encontrado! Usando coordenada de respaldo.";
-            if (s == "Waking up Minitouch agent and opening ports...") return u8"Despertando al agente Minitouch y abriendo puertos...";
-            if (s == "Winter Theme Removed! Start game manually.") return u8"¡Tema de Invierno Eliminado! Inicie el juego manualmente.";
-            if (s == "Wiping game data to create new account...") return u8"Borrando datos del juego para crear una nueva cuenta...";
-            if (s == "[ERROR] Minitouch connection failed!") return u8"[ERROR] ¡Fallo en la conexión Minitouch!";
-            if (s == "[INFO] Executing DENSE GRID Gesture...") return u8"[INFO] Ejecutando gesto de CUADRÍCULA DENSA...";
-            if (s == "[INFO] Executing DYNAMIC GRID Sweep...") return u8"[INFO] Ejecutando barrido de CUADRÍCULA DINÁMICA...";
-            if (s == "[SUCCESS] Dynamic Grid complete!") return u8"[ÉXITO] ¡Cuadrícula Dinámica completa!";
-            if (s == "[SUCCESS] Grid Sweep completed seamlessly!") return u8"[ÉXITO] ¡Barrido de Cuadrícula  completado sin problemas!";
-            if (s == "Want to ask something? ping me @inna in server. i will reply asap.") return u8"¿Quieres preguntar algo? Hazme ping @inna en el servidor. Responderé lo antes posible.";
-            if (s == "1. Initial Setup & Minitouch") return u8"1. Configuración Inicial y Minitouch";
-            if (s == "Before starting, you must click Inject Important Files. Without this you won't be able to use the bot. it injects Minitouch, Zoom, Font, Field color changer all in one.") return u8"Antes de empezar, debes hacer clic en Inject Important Files. Sin esto no podrás usar el bot. Inyecta Minitouch, Zoom, Fuente y cambiador de color de campo, todo en uno.";
-            if (s == "2. Bot Manager & Accounts") return u8"2. Gestor de Bots y Cuentas";
-            if (s == "Modes: Single Account Mode: It just plants, harvests, sells and repeats. Multi Account Mode: Bot Plants, Harvests, sells, changes account, repeats. After all accounts done, return to first account and so on.") return u8"Modos: Modo Cuenta Única: Solo planta, cosecha, vende y repite. Modo Multicuenta: El bot planta, cosecha, vende, cambia de cuenta, repite. Después de terminar todas las cuentas, vuelve a la primera y así sucesivamente.";
-            if (s == "To enable this you must Save your accounts. Enables automatically.") return u8"Para habilitar esto debes Guardar (Save) tus cuentas. Se habilita automáticamente.";
-            if (s == "How to save account : Create New account in Account management tab, After skipping tutorials and getting to farm level 7, Press \"Save Slot Data\".") return u8"Cómo guardar la cuenta: Crea una cuenta nueva en la pestaña de gestión de Cuentas, después de omitir los tutoriales y llegar al nivel 7 de la granja, pulsa \"Save Slot Data\".";
-            if (s == "If you want to change accounts manually you can press \"Load Slot Data\". Dont press this if you haven't saved account yet.") return u8"Si quieres cambiar las cuentas manualmente puedes pulsar \"Load Slot Data\". No pulses esto si aún no has guardado la cuenta.";
-            if (s == "IMPORTANT NOTE: DO NOT SAVE SUPERCELL ID ACCOUNTS BECAUSE YOU WILL GET COOKIES POP-UP AND BOT WONT WORK.") return u8"NOTA IMPORTANTE: NO GUARDES CUENTAS DE SUPERCELL ID PORQUE APARECERÁ LA VENTANA DE COOKIES Y EL BOT NO FUNCIONARÁ.";
-            if (s == "3. Auto Tom") return u8"3. Auto Tom";
-            if (s == "Read These Carefully or your bot can break.") return u8"Lee esto con atención o tu bot podría romperse.";
-            if (s == "To use Auto Tom, make sure Tom is not on Cooldown.") return u8"Para usar Auto Tom, asegúrate de que Tom no esté en tiempo de espera (Cooldown).";
-            if (s == "if bot can't find tom's crate, then make your own template.") return u8"Si el bot no puede encontrar la caja de Tom, haz tu propia plantilla (template).";
-            if (s == "4. Auto Transfer Bem/Sem") return u8"4. Auto Transferencia Bem/Sem";
-            if (s == "You have to enable instance 6 and put an account there. it will Work as storage account there.") return u8"Tienes que habilitar la instancia 6 y poner una cuenta ahí. Funcionará como cuenta de almacenamiento.";
-            if (s == "DONT ADD FRIEND YOUR BOTS MANUALLY. yes, you heard it. IF you already added your bots, please remove them. my bot will automatically add friend.") return u8"NO AÑADAS A TUS BOTS COMO AMIGOS MANUALMENTE. Sí, has oído bien. SI ya has añadido a tus bots, por favor elimínalos. Mi bot añadirá amigos automáticamente.";
-            if (s == "TEST IF FARM NAME READING FUNCTION WORKS PROPERLY. IF BOTS ADDED EACH OTHER AS FRIENDS WITHOUT PROBLEM, THAT MEANS EVERYTHING IS FINE. IF NOT, CHANGE YOUR FARM NAME TO SOMETHING READABLE (IF BOT READED YOUR FARM NAME WRONG, PLEASE OPEN NXRTH_CONFIG.INI AND DELETE FARM NAME INFO).") return u8"PRUEBA SI LA FUNCIÓN DE LECTURA DE NOMBRES DE GRANJAS FUNCIONA CORRECTAMENTE. SI LOS BOTS SE AÑADEN COMO AMIGOS SIN PROBLEMAS, SIGNIFICA QUE TODO ESTÁ BIEN. SI NO, CAMBIA EL NOMBRE DE TU GRANJA A ALGO LEGIBLE (SI EL BOT LEYÓ MAL EL NOMBRE DE TU GRANJA, ABRE NXRTH_CONFIG.INI Y BORRA LA INFO DEL NOMBRE).";
-            if (s == "5. Remote & Webhook") return u8"5. Control Remoto y Webhook";
-            if (s == "You can always configure Remote & Webhook feature in Remote & Webhook Tab.") return u8"Siempre puedes configurar la función de Remote & Webhook en su pestaña.";
-            if (s == "Type !id in my server to get your Discord id. To use Remote Control in Discord, You have to enter your discord id and Press \"Save Settings\" in Settings Tab.") return u8"Escribe !id en mi servidor para obtener tu ID de Discord. Para usar el Control Remoto, debes ingresar tu ID y pulsar \"Save Settings\" en la pestaña Ajustes.";
-            if (s == "Current remote controls are:") return u8"Los controles remotos actuales son:";
-            if (s == "[Note: <instanceid> is 1,2,3,4,5,6. For example 1 returns screenshot of first Memu.]") return u8"[Nota: <instanceid> es 1,2,3,4,5,6. Por ejemplo, 1 devuelve una captura del primer Memu.]";
-            if (s == "!status returns status of the bots to the Webhook.") return u8"!status devuelve el estado de los bots al Webhook.";
-            if (s == "!start <instanceid> (starts memu + hayday + bot. if both memu and hayday already open its ok.)") return u8"!start <instanceid> (inicia memu + hayday + bot. Si ya están abiertos, está bien.)";
-            if (s == "!ss <instanceid> (sends screenshot of the instance to the webhook address.)") return u8"!ss <instanceid> (envía captura de pantalla de la instancia a la dirección del webhook.)";
-            if (s == "!ssall sends screenshots of the active instances at the same time.") return u8"!ssall envía capturas de pantalla de las instancias activas al mismo tiempo.";
-            if (s == "!stop <instanceid> stops the bot.") return u8"!stop <instanceid> detiene el bot.";
-            if (s == "!stopall This is emergency command. Stops all bots at once.") return u8"!stopall Este es un comando de emergencia. Detiene todos los bots a la vez.";
-            if (s == "For Telegram:") return u8"Para Telegram:";
-            if (s == "Create your own telegram bot. You can search on Google for this.") return u8"Crea tu propio bot de Telegram. Puedes buscar en Google cómo hacerlo.";
-            if (s == "Enter your telegram bot token and chat id") return u8"Ingresa tu token de bot de Telegram y chat id";
-            if (s == "Press Save settings in Settings tab.") return u8"Pulsa Guardar ajustes en la pestaña Ajustes.";
-            if (s == "Enabling Webhook only sends status of the barn after each sale cycle.") return u8"Habilitar Webhook solo envía el estado del granero después de cada ciclo de venta.";
-            if (s == "My number reading can make mistakes, you better enable send screenshot with webhook if you really care.") return u8"Mi lectura de números puede cometer errores, es mejor habilitar enviar captura de pantalla con webhook si realmente te importa.";
-    }
-
-    // ==========================================================
-    // 3 - PORTEKİZCE (PORTUGUESE)
-    // ==========================================================
-    else if (g_Language == 3) {
-        if (s == "DASHBOARD") return u8"PAINEL DE CONTROLE";
-        if (s == "BOT MANAGER") return u8"GERENCIADOR DE BOTS";
-        if (s == "REMOTE & WEBHOOK") return u8"CONTROLE REMOTO E WEBHOOK";
-        if (s == "SETTINGS") return u8"CONFIGURAÇÕES";
-        if (s == "LOGS") return u8"REGISTROS";
-        if (s == "TEMPLATES") return u8"MODELOS";
-        if (s == "Active Instances: %d/4") return u8"Instâncias Ativas: %d/4";
-        if (s == "User: %s") return u8"Usuário: %s";
-        if (s == "License Expiring! (%d Days)") return u8"Licença expirando! (%d Dias)";
-        if (s == "Days Left: %d") return u8"Dias Restantes: %d";
-
-        if (s == "INSTANCES OVERVIEW") return u8"VISÃO GERAL DAS INSTÂNCIAS";
-        if (s == "TOTAL RUNTIME") return u8"TEMPO DE EXECUÇÃO TOTAL";
-        if (s == "TOTAL HARVEST / SALES") return u8"TOTAL COLHEITA / VENDAS";
-        if (s == "TOTAL COINS") return u8"TOTAL DE MOEDAS";
-        if (s == "TOTAL DIAMONDS") return u8"TOTAL DE DIAMANTES";
-        if (s == "INSTANCE #%d") return u8"INSTÂNCIA #%d";
-        if (s == "[ONLINE]") return u8"[ONLINE]";
-        if (s == "[OFFLINE]") return u8"[OFFLINE]";
-        if (s == "ADB: %s") return u8"Porta ADB: %s";
-        if (s == "Slot: %s") return u8"Slot: %s";
-        if (s == "Farm: %s | Lvl: %d") return u8"Fazenda: %s | Nvl: %d";
-        if (s == "Tag: %s") return u8"Tag: %s";
-        if (s == "Barn: Bolt: %d | Tape: %d | Plank: %d") return u8"Celeiro: Parafuso: %d | Fita: %d | Tábua: %d";
-        if (s == "Silo: Nail: %d | Screw: %d | Panel: %d") return u8"Silo: Prego: %d | Parafuso: %d | Painel: %d";
-        if (s == "Harvests: %d | Sales: %d") return u8"Colheitas: %d | Vendas: %d";
-        if (s == "Status: %s") return u8"Status: %s";
-        if (s == "Enable this instance in 'Bot Manager'") return u8"Ative esta instância em 'Gerenciador de Bots'";
-
-        if (s == "BOT INSTANCE MANAGER") return u8"GERENCIADOR DE INSTÂNCIA DE BOT";
-        if (s == "Instance #") return u8"Bot #";
-        if (s == "CONNECTION SETTINGS") return u8"CONFIGURAÇÕES DE CONEXÃO";
-        if (s == "Enable This Instance") return u8"Ativar Este Bot";
-        if (s == "ADB Serial/Port##adb") return u8"Serial/Porta ADB##adb";
-        if (s == "Input Device (Touchscreen):") return u8"Dispositivo de Entrada (Tela Touch):";
-        if (s == "VM Name##vm") return u8"Nome da VM##vm";
-        if (s == "Auto Detect") return u8"Detectar Automaticamente";
-        if (s == "TOOLS & DIAGNOSTICS") return u8"FERRAMENTAS E TESTES";
-        if (s == "Select Mode:") return u8"Selecionar Modo:";
-        if (s == "Wheat (2m)") return u8"Trigo (2m)";
-        if (s == "Corn (5m)") return u8"Milho (5m)";
-        if (s == "Carrot (10m)") return u8"Cenoura (10m)";
-        if (s == "Soybean (20m)") return u8"Soja (20m)";
-        if (s == "Sugarcane (30m)") return u8"Cana de Açúcar (30m)";
-        if (s == "TEST SEED") return u8"TESTAR SEMENTE";
-        if (s == "TEST GROWN") return u8"TESTAR COLHEITA";
-        if (s == "TEST FIELD") return u8"TESTAR CAMPO";
-        if (s == "TEST SICKLE") return u8"TESTAR FOICE";
-
-        if (s == "ACCOUNT MANAGER") return u8"GERENCIADOR DE CONTAS";
-        if (s == "Slot ") return u8"Slot ";
-        if (s == " (SELECTED)") return u8" (SELECIONADO)";
-        if (s == " [SAVED]") return u8" [SALVO]";
-        if (s == "Actions:") return u8"Ações:";
-        if (s == "Slot Selector") return u8"Seletor de Slot";
-        if (s == "SAVE SLOT DATA") return u8"SALVAR DADOS DO SLOT";
-        if (s == "LOAD SLOT DATA") return u8"CARREGAR DADOS DO SLOT";
-        if (s == "LAUNCH MEMU + HAY DAY") return u8"INICIAR MEMU + HAY DAY";
-        if (s == "START BOT") return u8"INICIAR BOT";
-        if (s == "STOP BOT") return u8"PARAR BOT";
-
-        if (s == "Account Management") return u8"Gerenciamento de Contas";
-        if (s == "TRANSFER ACCOUNTS BETWEEN INSTANCES") return u8"TRANSFERIR CONTAS ENTRE INSTÂNCIAS";
-        if (s == "MOVE ACCOUNT") return u8"MOVER CONTA";
-        if (s == "CREATE NEW ACCOUNT (WIPE GAME DATA)") return u8"CRIAR NOVA CONTA (APAGAR DADOS)";
-        if (s == "WIPE DATA & CREATE NEW") return u8"APAGAR DADOS E CRIAR NOVA";
-
-        if (s == "Auto Tom Config") return u8"Configuração do Tom";
-        if (s == "AUTOMATED TOM MANAGER") return u8"GERENCIADOR AUTOMÁTICO DO TOM";
-        if (s == "Enable Auto Tom For This Slot") return u8"Ativar Tom Automático para este Slot";
-        if (s == "Remaining Hours") return u8"Horas Restantes";
-        if (s == "Search Category") return u8"Categoria de Busca";
-        if (s == "Barn") return u8"Celeiro";
-        if (s == "Silo") return u8"Silo";
-        if (s == "Item Search Name") return u8"Nome do Item Buscado";
-        if (s == "ACCEPT ITEM NAME") return u8"ACEITAR NOME DO ITEM";
-
-        if (s == "Farm Inspector") return u8"Inspetor da Fazenda";
-        if (s == "LIVE FARM OVERVIEW & INVENTORY") return u8"VISÃO GERAL AO VIVO E INVENTÁRIO";
-
-        if (s == "GLOBAL APPLICATION SETTINGS") return u8"CONFIGURAÇÕES GLOBAIS DO APLICATIVO";
-        if (s == "SAVE ALL SETTINGS") return u8"SALVAR TODAS AS CONFIGURAÇÕES";
-        if (s == "ADB Executable Path:") return u8"Caminho do Executável ADB:";
-        if (s == "MEmu Console Path:") return u8"Caminho do Console MEmu:";
-        if (s == "Browse") return u8"Procurar";
-        if (s == "Browse##memu") return u8"Procurar##memu";
-
-        if (s == "CLEAR LOGS") return u8"LIMPAR REGISTROS";
-        if (s == "Auto-Scroll") return u8"Rolagem Automática";
-        if (s == "Filter:") return u8"Filtro:";
-        if (s == "ALL") return u8"TODOS";
-        if (s == "INST #1") return u8"BOT #1";
-        if (s == "[SYSTEM]") return u8"[SISTEMA]";
-
-        if (s == "TEMPLATE CONFIGURATION & MAKER") return u8"CONFIGURAÇÃO DE MODELOS E CRIADOR";
-        if (s == "Configuration") return u8"Configuração";
-        if (s == "Template Maker") return u8"Criador de Modelos";
-        if (s == "TAKE SCREENSHOT (Save to /templates)") return u8"TIRAR CAPTURA DE TELA";
-
-        if (s == "Username:") return u8"Usuário:";
-        if (s == "Password:") return u8"Senha:";
-        if (s == "Your Hardware ID (HWID):") return u8"Seu ID de Hardware (HWID):";
-        if (s == "Copy HWID") return u8"Copiar HWID";
-        if (s == "LOGIN TO DASHBOARD") return u8"ENTRAR NO PAINEL";
-
-        if (s == "ACCEPTING FRIEND REQUEST") return u8"ACEITANDO PEDIDO DE AMIZADE";
-        if (s == "Account Cycle Done. Moving to next...") return u8"Ciclo de Conta Concluído. Passando para a próxima...";
-        if (s == "Account Leveled Up! Claiming rewards...") return u8"Conta Subiu de Nível! Resgatando recompensas...";
-        if (s == "Account Saved & Encrypted Successfully.") return u8"Conta Salva e Criptografada com Sucesso.";
-        if (s == "Account Switched. Game Restarting.") return u8"Conta Trocada. Reiniciando Jogo.";
-        if (s == "Account successfully moved!") return u8"Conta movida com sucesso!";
-        if (s == "All retries failed. Moving on.") return u8"Todas as tentativas falharam. Continuando.";
-        if (s == "All visible fields are planted successfully.") return u8"Todos os campos visíveis foram plantados com sucesso.";
-        if (s == "App Launched.") return u8"Aplicativo Iniciado.";
-        if (s == "Auto Tom cycle complete! He will wake up in 2 hours.") return u8"Ciclo do Auto Tom concluído! Ele acordará em 2 horas.";
-        if (s == "BOT Started.") return u8"BOT Iniciado.";
-        if (s == "BOT Stopped by User.") return u8"BOT Parado pelo Usuário.";
-        if (s == "BOT Stopped via Emergency Remote Command.") return u8"BOT Parado por Comando Remoto de Emergência.";
-        if (s == "BOT Stopped via Remote Command.") return u8"BOT Parado por Comando Remoto.";
-        if (s == "Bot Started.") return u8"Bot Iniciado.";
-        if (s == "Checking Auto Tom...") return u8"Verificando Auto Tom...";
-        if (s == "Checking Game Load...") return u8"Verificando Carregamento do Jogo...";
-        if (s == "Checking Harvest...") return u8"Verificando Colheita...";
-        if (s == "Checking Plant...") return u8"Verificando Plantação...";
-        if (s == "Checking Sales...") return u8"Verificando Vendas...";
-        if (s == "Closing all menus to return to main screen...") return u8"Fechando todos os menus para retornar à tela principal...";
-        if (s == "Closing stuck menu before returning to farm...") return u8"Fechando menu travado antes de retornar à fazenda...";
-        if (s == "Collecting Items...") return u8"Coletando Itens...";
-        if (s == "Collecting coins...") return u8"Coletando moedas...";
-        if (s == "Cycle Done") return u8"Ciclo Concluído";
-        if (s == "Cycle End Cleanup...") return u8"Limpeza de Fim de Ciclo...";
-        if (s == "Data wiped successfully! Launch game to start fresh.") return u8"Dados apagados com sucesso! Inicie o jogo para começar do zero.";
-        if (s == "Decrypting & Switching Account...") return u8"Descriptografando e Trocando Conta...";
-        if (s == "Deploying Auto Tom...") return u8"Enviando Auto Tom...";
-        if (s == "Detecting Input...") return u8"Detectando Entrada...";
-        if (s == "ERROR: Shop not found or didn") return u8"ERRO: Loja não encontrada ou não";
-        if (s == "ERROR: Target not found on Radar!") return u8"ERRO: Alvo não encontrado no Radar!";
-        if (s == "ERROR: Waited 45s but Farm bot got stuck. Going home.") return u8"ERRO: Esperou 45s mas o bot da fazenda travou. Voltando para casa.";
-        if (s == "ERROR: friends.png NOT FOUND on screen!") return u8"ERRO: friends.png NÃO ENCONTRADO na tela!";
-        if (s == "Emergency Sales...") return u8"Vendas de Emergência...";
-        if (s == "Entered the shop. Initiating Heist Session...") return u8"Entrou na loja. Iniciando Sessão de Transferência...";
-        if (s == "Entering Sales Mode...") return u8"Entrando no Modo de Vendas...";
-        if (s == "Error: Config file missing!") return u8"Erro: Arquivo de configuração ausente!";
-        if (s == "Error: Could not read list. Check ADB path.") return u8"Erro: Não foi possível ler a lista. Verifique o caminho do ADB.";
-        if (s == "Error: File decryption failed! Corrupted data.") return u8"Erro: Falha na descriptografia do arquivo! Dados corrompidos.";
-        if (s == "Error: Slot file empty or missing!") return u8"Erro: Arquivo do slot vazio ou ausente!";
-        if (s == "Error: languages.csv missing in injecthacks folder!") return u8"Erro: languages.csv ausente na pasta injecthacks!";
-        if (s == "Error: themes.csv missing in folder!") return u8"Erro: themes.csv ausente na pasta!";
-        if (s == "Executing Webhook Routine (Checking for Transfer)...") return u8"Executando Rotina de Webhook (Verificando Transferência)...";
-        if (s == "Extracting Profile Data...") return u8"Extraindo Dados do Perfil...";
-        if (s == "Failed to open shop menu. Skipping sales.") return u8"Falha ao abrir o menu da loja. Pulando vendas.";
-        if (s == "Failed. Defaulting to /dev/input/event1") return u8"Falhou. Usando padrão /dev/input/event1";
-        if (s == "Field position mapped and saved!") return u8"Posição do campo mapeada e salva!";
-        if (s == "Files Injected Successfully!") return u8"Arquivos Injetados com Sucesso!";
-        if (s == "Focusing on search text box...") return u8"Focando na caixa de texto de pesquisa...";
-        if (s == "Font Hack Injected! Start game manually.") return u8"Hack de Fonte Injetado! Inicie o jogo manualmente.";
-        if (s == "Friend request accepted! Moving directly to infiltration...") return u8"Pedido de amizade aceito! Indo diretamente para a infiltração...";
-        if (s == "Friend request sent successfully!") return u8"Pedido de amizade enviado com sucesso!";
-        if (s == "Friend request signal received. Accepting...") return u8"Sinal de pedido de amizade recebido. Aceitando...";
-        if (s == "Game Loaded! Mailbox found.") return u8"Jogo Carregado! Caixa de correio encontrada.";
-        if (s == "Game Ready.") return u8"Jogo Pronto.";
-        if (s == "Grown crops detected via Color! Opening sickle menu...") return u8"Culturas maduras detectadas por Cor! Abrindo menu da foice...";
-        if (s == "HEIST ABORTED: Shop is completely full!") return u8"TRANSFERÊNCIA ABORTADA: A loja está completamente cheia!";
-        if (s == "HEIST ABORTED: Storage bot cancelled the operation!") return u8"TRANSFERÊNCIA ABORTADA: O bot de armazenamento cancelou a operação!";
-        if (s == "HEIST ABORTED: Storage bot failed to infiltrate!") return u8"TRANSFERÊNCIA ABORTADA: O bot de armazenamento falhou ao infiltrar!";
-        if (s == "HEIST ERROR: Could not verify shop is open after multiple tries!") return u8"ERRO DE TRANSFERÊNCIA: Não foi possível verificar se a loja está aberta após várias tentativas!";
-        if (s == "HEIST ERROR: Storage bot didn") return u8"ERRO DE TRANSFERÊNCIA: O bot de armazenamento não";
-        if (s == "HEIST FAILED: Could not send request.") return u8"TRANSFERÊNCIA FALHOU: Não foi possível enviar o pedido.";
-        if (s == "HEIST: All items transferred. Telling Storage Bot to go home.") return u8"TRANSFERÊNCIA: Todos os itens transferidos. Dizendo ao Bot de Armazenamento para voltar para casa.";
-        if (s == "HEIST: Friendship accepted! Closing menus and re-entering shop...") return u8"TRANSFERÊNCIA: Amizade aceita! Fechando menus e reentrando na loja...";
-        if (s == "HEIST: I have more items! Telling Storage Bot to wait...") return u8"TRANSFERÊNCIA: Tenho mais itens! Dizendo ao Bot de Armazenamento para esperar...";
-        if (s == "HEIST: Item Listed! GO GO GO!") return u8"TRANSFERÊNCIA: Item Listado! VAI VAI VAI!";
-        if (s == "HEIST: Not friends with storage. Initiating handshake...") return u8"TRANSFERÊNCIA: Não somos amigos do armazenamento. Iniciando protocolo...";
-        if (s == "HEIST: Shop didn") return u8"TRANSFERÊNCIA: A loja não";
-        if (s == "HEIST: Shop found, tapping...") return u8"TRANSFERÊNCIA: Loja encontrada, tocando...";
-        if (s == "HEIST: Shop not visible yet, waiting...") return u8"TRANSFERÊNCIA: Loja ainda não visível, esperando...";
-        if (s == "HEIST: Shop verified as open!") return u8"TRANSFERÊNCIA: Loja verificada como aberta!";
-        if (s == "HEIST: Transfer complete. Collecting coins...") return u8"TRANSFERÊNCIA: Transferência concluída. Coletando moedas...";
-        if (s == "Harvest interrupted by SILO FULL! Forcing emergency sales...") return u8"Colheita interrompida por SILO CHEIO! Forçando vendas de emergência...";
-        if (s == "Heist Failed! Seller didn") return u8"Transferência Falhou! O vendedor não";
-        if (s == "Heist Successful! Item secured.") return u8"Transferência Bem-Sucedida! Item garantido.";
-        if (s == "INFILTRATING: ") return u8"INFILTRANDO: ";
-        if (s == "ITEM LISTED! Waiting 800ms for network sync...") return u8"ITEM LISTADO! Esperando 800ms para sincronização de rede...";
-        if (s == "Initiating Auto Tom sequence...") return u8"Iniciando sequência do Auto Tom...";
-        if (s == "Injecting NXRTH Font & Language Hack...") return u8"Injetando Hack de Fonte e Idioma NXRTH...";
-        if (s == "Injecting important files for hacks...") return u8"Injetando arquivos importantes para hacks...";
-        if (s == "Item Sold.") return u8"Item Vendido.";
-        if (s == "LISTENING FOR SIGNALS") return u8"OUVINDO SINAIS";
-        if (s == "Launching Application...") return u8"Iniciando Aplicativo...";
-        if (s == "No crops to sell.") return u8"Não há culturas para vender.";
-        if (s == "No more items to transfer. Finishing heist session.") return u8"Não há mais itens para transferir. Finalizando sessão de transferência.";
-        if (s == "Not enough coins for Max Stack! Falling back to Mid...") return u8"Moedas insuficientes para Pilha Máxima! Voltando para Média...";
-        if (s == "Opening Tom Boxes...") return u8"Abrindo Caixas do Tom...";
-        if (s == "Optimization Applied. Restarting Game.") return u8"Otimização Aplicada. Reiniciando Jogo.";
-        if (s == "Optimizing View Distance...") return u8"Otimizando Distância de Visão...";
-        if (s == "Performing deep system cleanup to prevent Game Not Responding Error...") return u8"Realizando limpeza profunda do sistema para evitar Erro de Jogo Não Respondendo...";
-        if (s == "Placing Advertisement...") return u8"Colocando Anúncio...";
-        if (s == "Plant incomplete or failed. Suspecting false positive or stuck menu. Retrying...") return u8"Plantação incompleta ou falhou. Suspeita de falso positivo ou menu travado. Tentando novamente...";
-        if (s == "Purchase confirmed! Waiting 30s for Tom to deliver...") return u8"Compra confirmada! Esperando 30s para o Tom entregar...";
-        if (s == "Put on sale button not found.") return u8"Botão de colocar à venda não encontrado.";
-        if (s == "RADAR ERROR: Name found but acceptfq.png missing on that row!") return u8"ERRO NO RADAR: Nome encontrado, mas acceptfq.png ausente nessa linha!";
-        if (s == "RADAR ERROR: Target [") return u8"ERRO NO RADAR: Alvo [";
-        if (s == "RADAR: Green tick matched with name! Accepting...") return u8"RADAR: Marca verde corresponde ao nome! Aceitando...";
-        if (s == "RADAR: Initializing System...") return u8"RADAR: Inicializando Sistema...";
-        if (s == "RADAR: Mode 0 Active. Switching to ") return u8"RADAR: Modo 0 Ativo. Mudando para ";
-        if (s == "RADAR: Mode 1 Active. Scanning ") return u8"RADAR: Modo 1 Ativo. Escaneando ";
-        if (s == "RADAR: Request found! Scanning for green tick on the same row...") return u8"RADAR: Pedido encontrado! Escaneando marca verde na mesma linha...";
-        if (s == "RADAR: Scanning for -> [") return u8"RADAR: Escaneando por -> [";
-        if (s == "RADAR: Skipping menu open, already inside Friend Book.") return u8"RADAR: Pulando abertura de menu, já dentro do Livro de Amigos.";
-        if (s == "RADAR: Target found! Double clicking: [") return u8"RADAR: Alvo encontrado! Clique duplo: [";
-        if (s == "RADAR: Target not found here. Scrolling 50 pixels down...") return u8"RADAR: Alvo não encontrado aqui. Rolando 50 pixels para baixo...";
-        if (s == "RADIO: Transfer triggered! (") return u8"RÁDIO: Transferência ativada! (";
-        if (s == "Reading Account Profile Data...") return u8"Lendo Dados do Perfil da Conta...";
-        if (s == "Remote Command: ") return u8"Comando Remoto: ";
-        if (s == "Remote Start: Waking up Emulator...") return u8"Início Remoto: Acordando Emulador...";
-        if (s == "Removing Winter Theme...") return u8"Removendo Tema de Inverno...";
-        if (s == "Resuming Harvest...") return u8"Retomando Colheita...";
-        if (s == "Retrying Harvest...") return u8"Tentando Novamente a Colheita...";
-        if (s == "Retrying Plant...") return u8"Tentando Novamente a Plantação...";
-        if (s == "Returning to Home Base...") return u8"Retornando à Base Principal...";
-        if (s == "Returning to farm to complete the interrupted harvest...") return u8"Retornando à fazenda para completar a colheita interrompida...";
-        if (s == "Rotation Delta Report Sent!") return u8"Relatório Delta de Rotação Enviado!";
-        if (s == "SIGNAL RECEIVED! Target: [") return u8"SINAL RECEBIDO! Alvo: [";
-        if (s == "SIGNAL RECEIVED: Farm bot has more items! Waiting in shop...") return u8"SINAL RECEBIDO: O bot da fazenda tem mais itens! Esperando na loja...";
-        if (s == "SILO FULL DETECTED! Harvest interrupted.") return u8"SILO CHEIO DETECTADO! Colheita interrompida.";
-        if (s == "Save Failed. Check Settings.") return u8"Falha ao Salvar. Verifique as Configurações.";
-        if (s == "Saved location missing, searching crate again...") return u8"Localização salva ausente, procurando caixa novamente...";
-        if (s == "Saved location missing, searching crate to collect...") return u8"Localização salva ausente, procurando caixa para coletar...";
-        if (s == "Saving & Encrypting Account Data...") return u8"Salvando e Criptografando Dados da Conta...";
-        if (s == "Scanning Fields...") return u8"Escaneando Campos...";
-        if (s == "Scanning for Grown Crops...") return u8"Escaneando Culturas Maduras...";
-        if (s == "Screenshot failed: Empty frame.") return u8"Falha na captura de tela: Quadro vazio.";
-        if (s == "Seed Found. Calculating boundary box...") return u8"Semente Encontrada. Calculando caixa de limite...";
-        if (s == "Seed menu NOT opened or seed missing. Breaking plant loop.") return u8"Menu de sementes NÃO aberto ou semente ausente. Interrompendo loop de plantação.";
-        if (s == "Sending friend request to Storage (") return u8"Enviando pedido de amizade para o Armazenamento (";
-        if (s == "Settings saved to nxrth_config.ini") return u8"Configurações salvas em nxrth_config.ini";
-        if (s == "Shop is full.") return u8"A loja está cheia.";
-        if (s == "Sickle Found! Calculating harvest zone...") return u8"Foice Encontrada! Calculando zona de colheita...";
-        if (s == "Single Account Cycle Done. Waiting for crops...") return u8"Ciclo de Conta Única Concluído. Esperando culturas...";
-        if (s == "Single Account Mode") return u8"Modo de Conta Única";
-        if (s == "Single Account Mode Active.") return u8"Modo de Conta Única Ativo.";
-        if (s == "Single mode auto-detected. Skipping game restart.") return u8"Modo único detectado automaticamente. Pulando reinício do jogo.";
-        if (s == "Skipped Sales (Random)") return u8"Vendas Puladas (Aleatório)";
-        if (s == "Skipping normal sales check due to Emergency Sales.") return u8"Pulando verificação normal de vendas devido a Vendas de Emergência.";
-        if (s == "Starting Emulator Environment...") return u8"Iniciando Ambiente do Emulador...";
-        if (s == "Still poor! Falling back to Min Stack...") return u8"Ainda pobre! Voltando para Pilha Mínima...";
-        if (s == "Storage Auto-Transfer Activated. Listening on encrypted radio channel...") return u8"Transferência Automática de Armazenamento Ativada. Ouvindo no canal de rádio criptografado...";
-        if (s == "Storage Auto-Transfer Mode Halted.") return u8"Modo de Transferência Automática de Armazenamento Interrompido.";
-        if (s == "Storage Master is online. Waiting for signals...") return u8"Mestre de Armazenamento online. Esperando sinais...";
-        if (s == "Swapper Error: Source and Destination cannot be the same!") return u8"Erro do Trocador: Origem e Destino não podem ser os mesmos!";
-        if (s == "Swapper Error: Source slot is empty!") return u8"Erro do Trocador: Slot de origem está vazio!";
-        if (s == "TARGET LOCKED! Applying +30 X Offset & Executing Snipe...") return u8"ALVO TRAVADO! Aplicando Deslocamento de +30 X e Executando Disparo...";
-        if (s == "Timeout (Mailbox not found). Skipping account.") return u8"Tempo Esgotado (Caixa de correio não encontrada). Pulando conta.";
-        if (s == "Tom contract expired! Auto Tom disabled.") return u8"Contrato do Tom expirou! Auto Tom desativado.";
-        if (s == "Tom delivered! Collecting items...") return u8"Tom entregou! Coletando itens...";
-        if (s == "Tom deployed. Waiting 30s for him to return...") return u8"Tom enviado. Esperando 30s para ele retornar...";
-        if (s == "Tom is back! Clicking saved Crate location...") return u8"Tom voltou! Clicando na localização salva da Caixa...";
-        if (s == "Tom menu failed to open after 3 retries! Aborting sequence.") return u8"Menu do Tom falhou ao abrir após 3 tentativas! Abortando sequência.";
-        if (s == "WAITING FRIEND ACCEPT") return u8"ESPERANDO ACEITAÇÃO DE AMIGO";
-        if (s == "WAITING STORAGE BOSS") return u8"ESPERANDO CHEFE DE ARMAZENAMENTO";
-        if (s == "WARNING: home.png not found! Using fallback coordinate.") return u8"AVISO: home.png não encontrado! Usando coordenada alternativa.";
-        if (s == "Waking up Minitouch agent and opening ports...") return u8"Acordando agente Minitouch e abrindo portas...";
-        if (s == "Winter Theme Removed! Start game manually.") return u8"Tema de Inverno Removido! Inicie o jogo manualmente.";
-        if (s == "Wiping game data to create new account...") return u8"Apagando dados do jogo para criar nova conta...";
-        if (s == "[ERROR] Minitouch connection failed!") return u8"[ERRO] Falha na conexão Minitouch!";
-        if (s == "[INFO] Executing DENSE GRID Gesture...") return u8"[INFO] Executando Gesto de GRADE DENSA ...";
-        if (s == "[INFO] Executing DYNAMIC GRID Sweep...") return u8"[INFO] Executando Varredura de GRADE DINÂMICA...";
-        if (s == "[SUCCESS] Dynamic Grid complete!") return u8"[SUCESSO] Grade Dinâmica concluída!";
-        if (s == "[SUCCESS] Grid Sweep completed seamlessly!") return u8"[SUCESSO] Varredura de Grade concluída perfeitamente!";
-        if (s == "Want to ask something? ping me @inna in server. i will reply asap.") return u8"Quer perguntar algo? Me marque @inna no servidor. Responderei o mais breve possível.";
-        if (s == "1. Initial Setup & Minitouch") return u8"1. Configuração Inicial e Minitouch";
-        if (s == "Before starting, you must click Inject Important Files. Without this you won't be able to use the bot. it injects Minitouch, Zoom, Font, Field color changer all in one.") return u8"Antes de começar, você deve clicar em Inject Important Files. Sem isso, você não poderá usar o bot. Ele injeta Minitouch, Zoom, Fonte e trocador de cor de campo, tudo em um.";
-        if (s == "2. Bot Manager & Accounts") return u8"2. Gerenciador de Bots e Contas";
-        if (s == "Modes: Single Account Mode: It just plants, harvests, sells and repeats. Multi Account Mode: Bot Plants, Harvests, sells, changes account, repeats. After all accounts done, return to first account and so on.") return u8"Modos: Modo Conta Única: Apenas planta, colhe, vende e repete. Modo Múltiplas Contas: O bot planta, colhe, vende, muda de conta, repete. Depois de todas as contas terminadas, volta para a primeira e assim por diante.";
-        if (s == "To enable this you must Save your accounts. Enables automatically.") return u8"Para habilitar isso você deve Salvar (Save) suas contas. Habilita-se automaticamente.";
-        if (s == "How to save account : Create New account in Account management tab, After skipping tutorials and getting to farm level 7, Press \"Save Slot Data\".") return u8"Como salvar conta: Crie uma nova conta na aba de gerenciamento, depois de pular os tutoriais e chegar ao nível 7, pressione \"Save Slot Data\".";
-        if (s == "If you want to change accounts manually you can press \"Load Slot Data\". Dont press this if you haven't saved account yet.") return u8"Se quiser mudar de conta manualmente, pode pressionar \"Load Slot Data\". Não pressione se ainda não salvou a conta.";
-        if (s == "IMPORTANT NOTE: DO NOT SAVE SUPERCELL ID ACCOUNTS BECAUSE YOU WILL GET COOKIES POP-UP AND BOT WONT WORK.") return u8"NOTA IMPORTANTE: NÃO SALVE CONTAS SUPERCELL ID PORQUE APARECERÁ O POP-UP DE COOKIES E O BOT NÃO FUNCIONARÁ.";
-        if (s == "3. Auto Tom") return u8"3. Auto Tom";
-        if (s == "Read These Carefully or your bot can break.") return u8"Leia com atenção ou seu bot pode quebrar.";
-        if (s == "To use Auto Tom, make sure Tom is not on Cooldown.") return u8"Para usar Auto Tom, certifique-se de que Tom não está em tempo de recarga (Cooldown).";
-        if (s == "if bot can't find tom's crate, then make your own template.") return u8"Se o bot não encontrar a caixa do Tom, crie seu próprio template.";
-        if (s == "4. Auto Transfer Bem/Sem") return u8"4. Transferência Automática Bem/Sem";
-        if (s == "You have to enable instance 6 and put an account there. it will Work as storage account there.") return u8"Você tem que habilitar a instância 6 e colocar uma conta lá. Funcionará como conta de armazenamento.";
-        if (s == "DONT ADD FRIEND YOUR BOTS MANUALLY. yes, you heard it. IF you already added your bots, please remove them. my bot will automatically add friend.") return u8"NÃO ADICIONE SEUS BOTS COMO AMIGOS MANUALMENTE. Sim, você ouviu bem. SE você já adicionou, remova-os. Meu bot adicionará amigos automaticamente.";
-        if (s == "TEST IF FARM NAME READING FUNCTION WORKS PROPERLY. IF BOTS ADDED EACH OTHER AS FRIENDS WITHOUT PROBLEM, THAT MEANS EVERYTHING IS FINE. IF NOT, CHANGE YOUR FARM NAME TO SOMETHING READABLE (IF BOT READED YOUR FARM NAME WRONG, PLEASE OPEN NXRTH_CONFIG.INI AND DELETE FARM NAME INFO).") return u8"TESTE SE A FUNÇÃO DE LEITURA DE NOME DE FAZENDA FUNCIONA CORRETAMENTE. SE OS BOTS SE ADICIONAREM COMO AMIGOS SEM PROBLEMAS, ESTÁ TUDO BEM. SE NÃO, MUDE O NOME DA SUA FAZENDA PARA ALGO LEGÍVEL (SE O BOT LEU ERRADO, ABRA NXRTH_CONFIG.INI E APAGUE A INFORMAÇÃO DO NOME).";
-        if (s == "5. Remote & Webhook") return u8"5. Controle Remoto e Webhook";
-        if (s == "You can always configure Remote & Webhook feature in Remote & Webhook Tab.") return u8"Você sempre pode configurar o recurso Remote & Webhook na aba correspondente.";
-        if (s == "Type !id in my server to get your Discord id. To use Remote Control in Discord, You have to enter your discord id and Press \"Save Settings\" in Settings Tab.") return u8"Digite !id no meu servidor para obter seu ID do Discord. Para usar Controle Remoto, insira seu ID e pressione \"Save Settings\" na aba Configurações.";
-        if (s == "Current remote controls are:") return u8"Os controles remotos atuais são:";
-        if (s == "[Note: <instanceid> is 1,2,3,4,5,6. For example 1 returns screenshot of first Memu.]") return u8"[Nota: <instanceid> é 1,2,3,4,5,6. Exemplo: 1 retorna captura de tela do primeiro Memu.]";
-        if (s == "!status returns status of the bots to the Webhook.") return u8"!status retorna o status dos bots para o Webhook.";
-        if (s == "!start <instanceid> (starts memu + hayday + bot. if both memu and hayday already open its ok.)") return u8"!start <instanceid> (inicia memu + hayday + bot. Se ambos já estiverem abertos, tudo bem.)";
-        if (s == "!ss <instanceid> (sends screenshot of the instance to the webhook address.)") return u8"!ss <instanceid> (envia captura de tela da instância para o webhook.)";
-        if (s == "!ssall sends screenshots of the active instances at the same time.") return u8"!ssall envia capturas de tela das instâncias ativas ao mesmo tempo.";
-        if (s == "!stop <instanceid> stops the bot.") return u8"!stop <instanceid> para o bot.";
-        if (s == "!stopall This is emergency command. Stops all bots at once.") return u8"!stopall Este é um comando de emergência. Para todos os bots de uma vez.";
-        if (s == "For Telegram:") return u8"Para Telegram:";
-        if (s == "Create your own telegram bot. You can search on Google for this.") return u8"Crie seu próprio bot no Telegram. Pode pesquisar no Google como fazer.";
-        if (s == "Enter your telegram bot token and chat id") return u8"Insira seu token do bot e chat id do Telegram";
-        if (s == "Press Save settings in Settings tab.") return u8"Pressione Save settings na aba de Configurações.";
-        if (s == "Enabling Webhook only sends status of the barn after each sale cycle.") return u8"Ativar Webhook envia apenas o status do celeiro após cada ciclo de venda.";
-        if (s == "My number reading can make mistakes, you better enable send screenshot with webhook if you really care.") return u8"Minha leitura de números pode cometer erros, é melhor ativar enviar captura de tela com webhook se você realmente se importa.";
-}
-
-    // ==========================================================
-    // 4 - RUSÇA (RUSSIAN)
-    // ==========================================================
-    else if (g_Language == 4) {
-        if (s == "DASHBOARD") return u8"ПАНЕЛЬ УПРАВЛЕНИЯ";
-        if (s == "BOT MANAGER") return u8"МЕНЕДЖЕР БОТОВ";
-        if (s == "REMOTE & WEBHOOK") return u8"УДАЛЕННЫЙ КОНТРОЛЬ";
-        if (s == "SETTINGS") return u8"НАСТРОЙКИ";
-        if (s == "LOGS") return u8"ЖУРНАЛЫ";
-        if (s == "TEMPLATES") return u8"ШАБЛОНЫ";
-        if (s == "Active Instances: %d/4") return u8"Активные боты: %d/4";
-        if (s == "User: %s") return u8"Пользователь: %s";
-        if (s == "License Expiring! (%d Days)") return u8"Срок действия лицензии истекает! (%d дней)";
-        if (s == "Days Left: %d") return u8"Осталось дней: %d";
-
-        if (s == "INSTANCES OVERVIEW") return u8"ОБЗОР ЭКЗЕМПЛЯРОВ";
-        if (s == "TOTAL RUNTIME") return u8"ОБЩЕЕ ВРЕМЯ РАБОТЫ";
-        if (s == "TOTAL HARVEST / SALES") return u8"ВСЕГО СОБРАНО / ПРОДАЖ";
-        if (s == "TOTAL COINS") return u8"ВСЕГО МОНЕТ";
-        if (s == "TOTAL DIAMONDS") return u8"ВСЕГО АЛМАЗОВ";
-        if (s == "INSTANCE #%d") return u8"БОТ #%d";
-        if (s == "[ONLINE]") return u8"[ОНЛАЙН]";
-        if (s == "[OFFLINE]") return u8"[ОФФЛАЙН]";
-        if (s == "ADB: %s") return u8"Порт ADB: %s";
-        if (s == "Slot: %s") return u8"Слот: %s";
-        if (s == "Farm: %s | Lvl: %d") return u8"Ферма: %s | Ур: %d";
-        if (s == "Tag: %s") return u8"Тег: %s";
-        if (s == "Barn: Bolt: %d | Tape: %d | Plank: %d") return u8"Амбар: Болт: %d | Скотч: %d | Доска: %d";
-        if (s == "Silo: Nail: %d | Screw: %d | Panel: %d") return u8"Силос: Гвоздь: %d | Винт: %d | Панель: %d";
-        if (s == "Harvests: %d | Sales: %d") return u8"Сбор: %d | Продажи: %d";
-        if (s == "Status: %s") return u8"Статус: %s";
-        if (s == "Enable this instance in 'Bot Manager'") return u8"Включите этого бота в 'Менеджере ботов'";
-
-        if (s == "BOT INSTANCE MANAGER") return u8"МЕНЕДЖЕР ЭКЗЕМПЛЯРОВ БОТА";
-        if (s == "Instance #") return u8"Бот #";
-        if (s == "CONNECTION SETTINGS") return u8"НАСТРОЙКИ ПОДКЛЮЧЕНИЯ";
-        if (s == "Enable This Instance") return u8"Включить этого бота";
-        if (s == "(Target Port: %s)") return u8"(Целевой порт: %s)";
-        if (s == "ADB Serial/Port##adb") return u8"Серийный номер/Порт ADB##adb";
-        if (s == "Example: 127.0.0.1:21503 for MEmu 1") return u8"Пример: 127.0.0.1:21503 для MEmu 1";
-        if (s == "Input Device (Touchscreen):") return u8"Устройство ввода (Сенсор):";
-        if (s == "VM Name##vm") return u8"Имя ВМ##vm";
-        if (s == "Auto Detect") return u8"Автоопределение";
-        if (s == "TOOLS & DIAGNOSTICS") return u8"ИНСТРУМЕНТЫ И ТЕСТЫ";
-        if (s == "Select Mode:") return u8"Выберите режим:";
-        if (s == "Wheat (2m)") return u8"Пшеница (2м)";
-        if (s == "Corn (5m)") return u8"Кукуруза (5м)";
-        if (s == "Carrot (10m)") return u8"Морковь (10m)";
-        if (s == "Soybean (20m)") return u8"Соя (20m)";
-        if (s == "Sugarcane (30m)") return u8"Сахарный тростник (30m)";
-        if (s == "TEST SEED") return u8"ТЕСТ СЕМЯН";
-        if (s == "TEST GROWN") return u8"ТЕСТ РОСТА";
-        if (s == "TEST FIELD") return u8"ТЕСТ ПОЛЯ";
-        if (s == "TEST SICKLE") return u8"ТЕСТ СЕРПА";
-
-        if (s == "ACCOUNT MANAGER") return u8"МЕНЕДЖЕР АККАУНТОВ";
-        if (s == "Slot ") return u8"Слот ";
-        if (s == " (SELECTED)") return u8" (ВЫБРАН)";
-        if (s == " [SAVED]") return u8" [СОХРАНЕН]";
-        if (s == "Actions:") return u8"Действия:";
-        if (s == "Slot Selector") return u8"Выбор слота";
-        if (s == "SAVE SLOT DATA") return u8"СОХРАНИТЬ ДАННЫЕ СЛОТА";
-        if (s == "LOAD SLOT DATA") return u8"ЗАГРУЗИТЬ ДАННЫЕ СЛОТА";
-        if (s == "LAUNCH MEMU + HAY DAY") return u8"ЗАПУСТИТЬ MEMU + HAY DAY";
-        if (s == "START BOT") return u8"ЗАПУСТИТЬ БОТА";
-        if (s == "STOP BOT") return u8"ОСТАНОВИТЬ БОТА";
-
-        if (s == "Account Management") return u8"Управление аккаунтами";
-        if (s == "TRANSFER ACCOUNTS BETWEEN INSTANCES") return u8"ПЕРЕНОС АККАУНТОВ МЕЖДУ ЭКЗЕМПЛЯРАМИ";
-        if (s == "MOVE ACCOUNT") return u8"ПЕРЕМЕСТИТЬ АККАУНТ";
-        if (s == "CREATE NEW ACCOUNT (WIPE GAME DATA)") return u8"СОЗДАТЬ НОВЫЙ АККАУНТ (УДАЛИТЬ ДАННЫЕ)";
-        if (s == "WIPE DATA & CREATE NEW") return u8"ОЧИСТИТЬ ДАННЫЕ И СОЗДАТЬ";
-
-        if (s == "Auto Tom Config") return u8"Настройка Авто-Тома";
-        if (s == "AUTOMATED TOM MANAGER") return u8"МЕНЕДЖЕР АВТО-ТОМА";
-        if (s == "Enable Auto Tom For This Slot") return u8"Включить Авто-Том для этого слота";
-        if (s == "Remaining Hours") return u8"Осталось часов";
-        if (s == "Search Category") return u8"Категория поиска";
-        if (s == "Barn") return u8"Амбар";
-        if (s == "Silo") return u8"Силос";
-        if (s == "Item Search Name") return u8"Имя предмета для поиска";
-        if (s == "ACCEPT ITEM NAME") return u8"ПРИНЯТЬ ИМЯ ПРЕДМЕТА";
-
-        if (s == "Farm Inspector") return u8"Инспектор фермы";
-        if (s == "LIVE FARM OVERVIEW & INVENTORY") return u8"ОБЗОР ФЕРМЫ И ИНВЕНТАРЯ";
-
-        if (s == "GLOBAL APPLICATION SETTINGS") return u8"ГЛОБАЛЬНЫЕ НАСТРОЙКИ ПРИЛОЖЕНИЯ";
-        if (s == "SAVE ALL SETTINGS") return u8"СОХРАНИТЬ ВСЕ НАСТРОЙКИ";
-        if (s == "ADB Executable Path:") return u8"Путь к ADB.exe:";
-        if (s == "MEmu Console Path:") return u8"Путь к MEmuConsole.exe:";
-        if (s == "Browse") return u8"Обзор";
-        if (s == "Browse##memu") return u8"Обзор##memu";
-
-        if (s == "CLEAR LOGS") return u8"ОЧИСТИТЬ ЖУРНАЛЫ";
-        if (s == "Auto-Scroll") return u8"Автопрокрутка";
-        if (s == "Filter:") return u8"Фильтр:";
-        if (s == "ALL") return u8"ВСЕ";
-        if (s == "INST #1") return u8"БОТ #1";
-        if (s == "[SYSTEM]") return u8"[СИСТЕМА]";
-
-        if (s == "TEMPLATE CONFIGURATION & MAKER") return u8"НАСТРОЙКА И СОЗДАТЕЛЬ ШАБЛОНОВ";
-        if (s == "Configuration") return u8"Конфигурация";
-        if (s == "Template Maker") return u8"Создатель шаблонов";
-        if (s == "TAKE SCREENSHOT (Save to /templates)") return u8"СДЕЛАТЬ СКРИНШОТ";
-
-        if (s == "Username:") return u8"Имя пользователя:";
-        if (s == "Password:") return u8"Пароль:";
-        if (s == "Your Hardware ID (HWID):") return u8"Ваш аппаратный ID (HWID):";
-        if (s == "Copy HWID") return u8"Копировать HWID";
-        if (s == "LOGIN TO DASHBOARD") return u8"ВОЙТИ В ПАНЕЛЬ";
-
-        if (s == "ACCEPTING FRIEND REQUEST") return u8"ПРИНЯТИЕ ЗАПРОСА В ДРУЗЬЯ";
-        if (s == "Account Cycle Done. Moving to next...") return u8"Цикл аккаунта завершен. Переход к следующему...";
-        if (s == "Account Leveled Up! Claiming rewards...") return u8"Уровень аккаунта повышен! Получение наград...";
-        if (s == "Account Saved & Encrypted Successfully.") return u8"Аккаунт успешно сохранен и зашифрован.";
-        if (s == "Account Switched. Game Restarting.") return u8"Аккаунт переключен. Перезапуск игры.";
-        if (s == "Account successfully moved!") return u8"Аккаунт успешно перемещен!";
-        if (s == "All retries failed. Moving on.") return u8"Все попытки не удались. Продолжение.";
-        if (s == "All visible fields are planted successfully.") return u8"Все видимые поля успешно засеяны.";
-        if (s == "App Launched.") return u8"Приложение запущено.";
-        if (s == "Auto Tom cycle complete! He will wake up in 2 hours.") return u8"Цикл Авто-Тома завершен! Он проснется через 2 часа.";
-        if (s == "BOT Started.") return u8"БОТ запущен.";
-        if (s == "BOT Stopped by User.") return u8"БОТ остановлен пользователем.";
-        if (s == "BOT Stopped via Emergency Remote Command.") return u8"БОТ остановлен удаленной экстренной командой.";
-        if (s == "BOT Stopped via Remote Command.") return u8"БОТ остановлен удаленной командой.";
-        if (s == "Bot Started.") return u8"Бот запущен.";
-        if (s == "Checking Auto Tom...") return u8"Проверка Авто-Тома...";
-        if (s == "Checking Game Load...") return u8"Проверка загрузки игры...";
-        if (s == "Checking Harvest...") return u8"Проверка урожая...";
-        if (s == "Checking Plant...") return u8"Проверка посадок...";
-        if (s == "Checking Sales...") return u8"Проверка продаж...";
-        if (s == "Closing all menus to return to main screen...") return u8"Закрытие всех меню для возврата на главный экран...";
-        if (s == "Closing stuck menu before returning to farm...") return u8"Закрытие зависшего меню перед возвращением на ферму...";
-        if (s == "Collecting Items...") return u8"Сбор предметов...";
-        if (s == "Collecting coins...") return u8"Сбор монет...";
-        if (s == "Cycle Done") return u8"Цикл завершен";
-        if (s == "Cycle End Cleanup...") return u8"Очистка в конце цикла...";
-        if (s == "Data wiped successfully! Launch game to start fresh.") return u8"Данные успешно стерты! Запустите игру, чтобы начать заново.";
-        if (s == "Decrypting & Switching Account...") return u8"Расшифровка и переключение аккаунта...";
-        if (s == "Deploying Auto Tom...") return u8"Развертывание Авто-Тома...";
-        if (s == "Detecting Input...") return u8"Обнаружение ввода...";
-        if (s == "ERROR: Shop not found or didn") return u8"ОШИБКА: Магазин не найден или не";
-        if (s == "ERROR: Target not found on Radar!") return u8"ОШИБКА: Цель не найдена на радаре!";
-        if (s == "ERROR: Waited 45s but Farm bot got stuck. Going home.") return u8"ОШИБКА: Ожидание 45 сек, но бот фермы застрял. Возвращение домой.";
-        if (s == "ERROR: friends.png NOT FOUND on screen!") return u8"ОШИБКА: friends.png НЕ НАЙДЕН на экране!";
-        if (s == "Emergency Sales...") return u8"Экстренные продажи...";
-        if (s == "Entered the shop. Initiating Heist Session...") return u8"Вход в магазин. Запуск сеанса передачи...";
-        if (s == "Entering Sales Mode...") return u8"Вход в режим продаж...";
-        if (s == "Error: Config file missing!") return u8"Ошибка: Отсутствует файл конфигурации!";
-        if (s == "Error: Could not read list. Check ADB path.") return u8"Ошибка: Не удалось прочитать список. Проверьте путь ADB.";
-        if (s == "Error: File decryption failed! Corrupted data.") return u8"Ошибка: Сбой расшифровки файла! Поврежденные данные.";
-        if (s == "Error: Slot file empty or missing!") return u8"Ошибка: Файл слота пуст или отсутствует!";
-        if (s == "Error: languages.csv missing in injecthacks folder!") return u8"Ошибка: languages.csv отсутствует в папке injecthacks!";
-        if (s == "Error: themes.csv missing in folder!") return u8"Ошибка: themes.csv отсутствует в папке!";
-        if (s == "Executing Webhook Routine (Checking for Transfer)...") return u8"Выполнение рутины вебхука (Проверка передачи)...";
-        if (s == "Extracting Profile Data...") return u8"Извлечение данных профиля...";
-        if (s == "Failed to open shop menu. Skipping sales.") return u8"Не удалось открыть меню магазина. Пропуск продаж.";
-        if (s == "Failed. Defaulting to /dev/input/event1") return u8"Сбой. Используется по умолчанию /dev/input/event1";
-        if (s == "Field position mapped and saved!") return u8"Позиция поля определена и сохранена!";
-        if (s == "Files Injected Successfully!") return u8"Файлы успешно внедрены!";
-        if (s == "Focusing on search text box...") return u8"Фокусировка на текстовом поле поиска...";
-        if (s == "Font Hack Injected! Start game manually.") return u8"Шрифтовой хак внедрен! Запустите игру вручную.";
-        if (s == "Friend request accepted! Moving directly to infiltration...") return u8"Запрос в друзья принят! Прямой переход к внедрению...";
-        if (s == "Friend request sent successfully!") return u8"Запрос в друзья успешно отправлен!";
-        if (s == "Friend request signal received. Accepting...") return u8"Получен сигнал запроса в друзья. Принятие...";
-        if (s == "Game Loaded! Mailbox found.") return u8"Игра загружена! Почтовый ящик найден.";
-        if (s == "Game Ready.") return u8"Игра готова.";
-        if (s == "Grown crops detected via Color! Opening sickle menu...") return u8"Выросшие культуры обнаружены по цвету! Открытие меню серпа...";
-        if (s == "HEIST ABORTED: Shop is completely full!") return u8"ПЕРЕДАЧА ОТМЕНЕНА: Магазин полностью заполнен!";
-        if (s == "HEIST ABORTED: Storage bot cancelled the operation!") return u8"ПЕРЕДАЧА ОТМЕНЕНА: Бот-хранилище отменил операцию!";
-        if (s == "HEIST ABORTED: Storage bot failed to infiltrate!") return u8"ПЕРЕДАЧА ОТМЕНЕНА: Бот-хранилище не смог внедриться!";
-        if (s == "HEIST ERROR: Could not verify shop is open after multiple tries!") return u8"ОШИБКА ПЕРЕДАЧИ: Не удалось подтвердить открытие магазина после нескольких попыток!";
-        if (s == "HEIST ERROR: Storage bot didn") return u8"ОШИБКА ПЕРЕДАЧИ: Бот-хранилище не";
-        if (s == "HEIST FAILED: Could not send request.") return u8"ПЕРЕДАЧА НЕ УДАЛАСЬ: Не удалось отправить запрос.";
-        if (s == "HEIST: All items transferred. Telling Storage Bot to go home.") return u8"ПЕРЕДАЧА: Все предметы перенесены. Команда боту-хранилищу вернуться домой.";
-        if (s == "HEIST: Friendship accepted! Closing menus and re-entering shop...") return u8"ПЕРЕДАЧА: Дружба принята! Закрытие меню и повторный вход в магазин...";
-        if (s == "HEIST: I have more items! Telling Storage Bot to wait...") return u8"ПЕРЕДАЧА: У меня есть еще предметы! Команда боту-хранилищу подождать...";
-        if (s == "HEIST: Item Listed! GO GO GO!") return u8"ПЕРЕДАЧА: Предмет выставлен! ВПЕРЕД ВПЕРЕД ВПЕРЕД!";
-        if (s == "HEIST: Not friends with storage. Initiating handshake...") return u8"ПЕРЕДАЧА: Нет в друзьях у хранилища. Инициация связи...";
-        if (s == "HEIST: Shop didn") return u8"ПЕРЕДАЧА: Магазин не";
-        if (s == "HEIST: Shop found, tapping...") return u8"ПЕРЕДАЧА: Магазин найден, нажатие...";
-        if (s == "HEIST: Shop not visible yet, waiting...") return u8"ПЕРЕДАЧА: Магазин пока не виден, ожидание...";
-        if (s == "HEIST: Shop verified as open!") return u8"ПЕРЕДАЧА: Магазин подтвержден как открытый!";
-        if (s == "HEIST: Transfer complete. Collecting coins...") return u8"ПЕРЕДАЧА: Перевод завершен. Сбор монет...";
-        if (s == "Harvest interrupted by SILO FULL! Forcing emergency sales...") return u8"Сбор урожая прерван из-за ЗАПОЛНЕНИЯ СИЛОСА! Принудительные экстренные продажи...";
-        if (s == "Heist Failed! Seller didn") return u8"Передача не удалась! Продавец не";
-        if (s == "Heist Successful! Item secured.") return u8"Передача успешна! Предмет в безопасности.";
-        if (s == "INFILTRATING: ") return u8"ВНЕДРЕНИЕ: ";
-        if (s == "ITEM LISTED! Waiting 800ms for network sync...") return u8"ПРЕДМЕТ ВЫСТАВЛЕН! Ожидание 800мс для синхронизации сети...";
-        if (s == "Initiating Auto Tom sequence...") return u8"Запуск последовательности Авто-Тома...";
-        if (s == "Injecting NXRTH Font & Language Hack...") return u8"Внедрение хака шрифтов и языка NXRTH...";
-        if (s == "Injecting important files for hacks...") return u8"Внедрение важных файлов для хаков...";
-        if (s == "Item Sold.") return u8"Предмет продан.";
-        if (s == "LISTENING FOR SIGNALS") return u8"ОЖИДАНИЕ СИГНАЛОВ";
-        if (s == "Launching Application...") return u8"Запуск приложения...";
-        if (s == "No crops to sell.") return u8"Нет культур для продажи.";
-        if (s == "No more items to transfer. Finishing heist session.") return u8"Больше нет предметов для передачи. Завершение сеанса передачи.";
-        if (s == "Not enough coins for Max Stack! Falling back to Mid...") return u8"Недостаточно монет для максимальной стопки! Переход к средней...";
-        if (s == "Opening Tom Boxes...") return u8"Открытие коробок Тома...";
-        if (s == "Optimization Applied. Restarting Game.") return u8"Оптимизация применена. Перезапуск игры.";
-        if (s == "Optimizing View Distance...") return u8"Оптимизация дальности прорисовки...";
-        if (s == "Performing deep system cleanup to prevent Game Not Responding Error...") return u8"Выполнение глубокой очистки системы для предотвращения ошибки зависания игры...";
-        if (s == "Placing Advertisement...") return u8"Размещение объявления...";
-        if (s == "Plant incomplete or failed. Suspecting false positive or stuck menu. Retrying...") return u8"Посадка не завершена или не удалась. Подозревается ложное срабатывание или зависшее меню. Повтор...";
-        if (s == "Purchase confirmed! Waiting 30s for Tom to deliver...") return u8"Покупка подтверждена! Ожидание 30 сек. доставки Тома...";
-        if (s == "Put on sale button not found.") return u8"Кнопка выставления на продажу не найдена.";
-        if (s == "RADAR ERROR: Name found but acceptfq.png missing on that row!") return u8"ОШИБКА РАДАРА: Имя найдено, но acceptfq.png отсутствует в этой строке!";
-        if (s == "RADAR ERROR: Target [") return u8"ОШИБКА РАДАРА: Цель [";
-        if (s == "RADAR: Green tick matched with name! Accepting...") return u8"РАДАР: Зеленая галочка совпадает с именем! Принятие...";
-        if (s == "RADAR: Initializing System...") return u8"РАДАР: Инициализация системы...";
-        if (s == "RADAR: Mode 0 Active. Switching to ") return u8"РАДАР: Режим 0 активен. Переключение на ";
-        if (s == "RADAR: Mode 1 Active. Scanning ") return u8"РАДАР: Режим 1 активен. Сканирование ";
-        if (s == "RADAR: Request found! Scanning for green tick on the same row...") return u8"РАДАР: Запрос найден! Поиск зеленой галочки в той же строке...";
-        if (s == "RADAR: Scanning for -> [") return u8"РАДАР: Сканирование -> [";
-        if (s == "RADAR: Skipping menu open, already inside Friend Book.") return u8"РАДАР: Пропуск открытия меню, уже в Книге друзей.";
-        if (s == "RADAR: Target found! Double clicking: [") return u8"РАДАР: Цель найдена! Двойной клик: [";
-        if (s == "RADAR: Target not found here. Scrolling 50 pixels down...") return u8"РАДАР: Цель здесь не найдена. Прокрутка на 50 пикселей вниз...";
-        if (s == "RADIO: Transfer triggered! (") return u8"РАДИО: Передача активирована! (";
-        if (s == "Reading Account Profile Data...") return u8"Чтение данных профиля аккаунта...";
-        if (s == "Remote Command: ") return u8"Удаленная команда: ";
-        if (s == "Remote Start: Waking up Emulator...") return u8"Удаленный запуск: Пробуждение эмулятора...";
-        if (s == "Removing Winter Theme...") return u8"Удаление зимней темы...";
-        if (s == "Resuming Harvest...") return u8"Возобновление сбора урожая...";
-        if (s == "Retrying Harvest...") return u8"Повторная попытка сбора урожая...";
-        if (s == "Retrying Plant...") return u8"Повторная попытка посадки...";
-        if (s == "Returning to Home Base...") return u8"Возвращение на главную базу...";
-        if (s == "Returning to farm to complete the interrupted harvest...") return u8"Возвращение на ферму для завершения прерванного сбора урожая...";
-        if (s == "Rotation Delta Report Sent!") return u8"Отчет о дельте ротации отправлен!";
-        if (s == "SIGNAL RECEIVED! Target: [") return u8"СИГНАЛ ПОЛУЧЕН! Цель: [";
-        if (s == "SIGNAL RECEIVED: Farm bot has more items! Waiting in shop...") return u8"СИГНАЛ ПОЛУЧЕН: У бота фермы есть еще предметы! Ожидание в магазине...";
-        if (s == "SILO FULL DETECTED! Harvest interrupted.") return u8"ОБНАРУЖЕН ЗАПОЛНЕННЫЙ СИЛОС! Сбор урожая прерван.";
-        if (s == "Save Failed. Check Settings.") return u8"Сбой сохранения. Проверьте настройки.";
-        if (s == "Saved location missing, searching crate again...") return u8"Сохраненное местоположение отсутствует, повторный поиск ящика...";
-        if (s == "Saved location missing, searching crate to collect...") return u8"Сохраненное местоположение отсутствует, поиск ящика для сбора...";
-        if (s == "Saving & Encrypting Account Data...") return u8"Сохранение и шифрование данных аккаунта...";
-        if (s == "Scanning Fields...") return u8"Сканирование полей...";
-        if (s == "Scanning for Grown Crops...") return u8"Сканирование выросших культур...";
-        if (s == "Screenshot failed: Empty frame.") return u8"Сбой скриншота: Пустой кадр.";
-        if (s == "Seed Found. Calculating boundary box...") return u8"Семена найдены. Вычисление ограничивающей рамки...";
-        if (s == "Seed menu NOT opened or seed missing. Breaking plant loop.") return u8"Меню семян НЕ открыто или семена отсутствуют. Прерывание цикла посадки.";
-        if (s == "Sending friend request to Storage (") return u8"Отправка запроса в друзья Хранилищу (";
-        if (s == "Settings saved to nxrth_config.ini") return u8"Настройки сохранены в nxrth_config.ini";
-        if (s == "Shop is full.") return u8"Магазин полон.";
-        if (s == "Sickle Found! Calculating harvest zone...") return u8"Серп найден! Вычисление зоны сбора урожая...";
-        if (s == "Single Account Cycle Done. Waiting for crops...") return u8"Цикл одного аккаунта завершен. Ожидание урожая...";
-        if (s == "Single Account Mode") return u8"Режим одного аккаунта";
-        if (s == "Single Account Mode Active.") return u8"Активен режим одного аккаунта.";
-        if (s == "Single mode auto-detected. Skipping game restart.") return u8"Автоматически обнаружен одиночный режим. Пропуск перезапуска игры.";
-        if (s == "Skipped Sales (Random)") return u8"Пропущенные продажи (Случайно)";
-        if (s == "Skipping normal sales check due to Emergency Sales.") return u8"Пропуск обычной проверки продаж из-за экстренных продаж.";
-        if (s == "Starting Emulator Environment...") return u8"Запуск среды эмулятора...";
-        if (s == "Still poor! Falling back to Min Stack...") return u8"Все еще мало монет! Возврат к минимальной стопке...";
-        if (s == "Storage Auto-Transfer Activated. Listening on encrypted radio channel...") return u8"Автопередача хранилища активирована. Прослушивание зашифрованного радиоканала...";
-        if (s == "Storage Auto-Transfer Mode Halted.") return u8"Режим автопередачи хранилища остановлен.";
-        if (s == "Storage Master is online. Waiting for signals...") return u8"Мастер хранилища в сети. Ожидание сигналов...";
-        if (s == "Swapper Error: Source and Destination cannot be the same!") return u8"Ошибка переключателя: Источник и назначение не могут совпадать!";
-        if (s == "Swapper Error: Source slot is empty!") return u8"Ошибка переключателя: Исходный слот пуст!";
-        if (s == "TARGET LOCKED! Applying +30 X Offset & Executing Snipe...") return u8"ЦЕЛЬ ЗАХВАЧЕНА! Применение смещения +30 по X и выполнение снайперского захвата...";
-        if (s == "Timeout (Mailbox not found). Skipping account.") return u8"Тайм-аут (почтовый ящик не найден). Пропуск аккаунта.";
-        if (s == "Tom contract expired! Auto Tom disabled.") return u8"Контракт Тома истек! Авто-Том отключен.";
-        if (s == "Tom delivered! Collecting items...") return u8"Том доставил! Сбор предметов...";
-        if (s == "Tom deployed. Waiting 30s for him to return...") return u8"Том отправлен. Ожидание 30 сек. до его возвращения...";
-        if (s == "Tom is back! Clicking saved Crate location...") return u8"Том вернулся! Нажатие на сохраненное местоположение ящика...";
-        if (s == "Tom menu failed to open after 3 retries! Aborting sequence.") return u8"Меню Тома не удалось открыть после 3 попыток! Прерывание последовательности.";
-        if (s == "WAITING FRIEND ACCEPT") return u8"ОЖИДАНИЕ ПРИНЯТИЯ В ДРУЗЬЯ";
-        if (s == "WAITING STORAGE BOSS") return u8"ОЖИДАНИЕ БОССА ХРАНИЛИЩА";
-        if (s == "WARNING: home.png not found! Using fallback coordinate.") return u8"ВНИМАНИЕ: home.png не найден! Использование резервных координат.";
-        if (s == "Waking up Minitouch agent and opening ports...") return u8"Пробуждение агента Minitouch и открытие портов...";
-        if (s == "Winter Theme Removed! Start game manually.") return u8"Зимняя тема удалена! Запустите игру вручную.";
-        if (s == "Wiping game data to create new account...") return u8"Удаление данных игры для создания нового аккаунта...";
-        if (s == "[ERROR] Minitouch connection failed!") return u8"[ОШИБКА] Сбой подключения Minitouch!";
-        if (s == "[INFO] Executing DENSE GRID  Gesture...") return u8"[ИНФО] Выполнение жеста ПЛОТНАЯ СЕТКА...";
-        if (s == "[INFO] Executing DYNAMIC GRID Sweep...") return u8"[ИНФО] Выполнение сканирования ДИНАМИЧЕСКАЯ СЕТКА...";
-        if (s == "[SUCCESS] Dynamic Grid complete!") return u8"[УСПЕХ] Динамическая сетка завершена!";
-        if (s == "[SUCCESS] Grid Sweep  completed seamlessly!") return u8"[УСПЕХ] Сканирование сетки успешно завершено!";
-        if (s == "Want to ask something? ping me @inna in server. i will reply asap.") return u8"Хотите что-то спросить? Пингуйте меня @inna на сервере. Я отвечу как можно скорее.";
-        if (s == "1. Initial Setup & Minitouch") return u8"1. Начальная настройка и Minitouch";
-        if (s == "Before starting, you must click Inject Important Files. Without this you won't be able to use the bot. it injects Minitouch, Zoom, Font, Field color changer all in one.") return u8"Перед запуском нажмите Inject Important Files. Без этого вы не сможете использовать бота. Это внедряет Minitouch, Zoom, Шрифт и изменение цвета поля.";
-        if (s == "2. Bot Manager & Accounts") return u8"2. Менеджер ботов и Аккаунты";
-        if (s == "Modes: Single Account Mode: It just plants, harvests, sells and repeats. Multi Account Mode: Bot Plants, Harvests, sells, changes account, repeats. After all accounts done, return to first account and so on.") return u8"Режимы: Режим одного аккаунта: Сажает, собирает, продает и повторяет. Режим нескольких аккаунтов: Сажает, собирает, продает, меняет аккаунт, повторяет. После всех аккаунтов возвращается к первому.";
-        if (s == "To enable this you must Save your accounts. Enables automatically.") return u8"Чтобы включить это, вы должны Сохранить (Save) свои аккаунты. Включается автоматически.";
-        if (s == "How to save account : Create New account in Account management tab, After skipping tutorials and getting to farm level 7, Press \"Save Slot Data\".") return u8"Как сохранить аккаунт: Создайте новый аккаунт во вкладке управления, после пропуска обучения и достижения 7 уровня нажмите \"Save Slot Data\".";
-        if (s == "If you want to change accounts manually you can press \"Load Slot Data\". Dont press this if you haven't saved account yet.") return u8"Для смены аккаунта вручную нажмите \"Load Slot Data\". Не нажимайте, если еще не сохранили аккаунт.";
-        if (s == "IMPORTANT NOTE: DO NOT SAVE SUPERCELL ID ACCOUNTS BECAUSE YOU WILL GET COOKIES POP-UP AND BOT WONT WORK.") return u8"ВАЖНОЕ ПРИМЕЧАНИЕ: НЕ СОХРАНЯЙТЕ АККАУНТЫ SUPERCELL ID, ИНАЧЕ ПОЯВИТСЯ ОКНО COOKIES И БОТ НЕ БУДЕТ РАБОТАТЬ.";
-        if (s == "3. Auto Tom") return u8"3. Auto Tom";
-        if (s == "Read These Carefully or your bot can break.") return u8"Прочтите это внимательно, иначе ваш бот может сломаться.";
-        if (s == "To use Auto Tom, make sure Tom is not on Cooldown.") return u8"Для использования Auto Tom убедитесь, что у Тома нет кулдауна.";
-        if (s == "if bot can't find tom's crate, then make your own template.") return u8"Если бот не может найти ящик Тома, создайте свой собственный шаблон.";
-        if (s == "4. Auto Transfer Bem/Sem") return u8"4. Автопередача Bem/Sem";
-        if (s == "You have to enable instance 6 and put an account there. it will Work as storage account there.") return u8"Вы должны включить инстанс 6 и добавить туда аккаунт. Он будет работать как склад.";
-        if (s == "DONT ADD FRIEND YOUR BOTS MANUALLY. yes, you heard it. IF you already added your bots, please remove them. my bot will automatically add friend.") return u8"НЕ ДОБАВЛЯЙТЕ БОТОВ В ДРУЗЬЯ ВРУЧНУЮ. Да, вы не ослышались. ЕСЛИ вы уже добавили, удалите их. Мой бот добавит их сам.";
-        if (s == "TEST IF FARM NAME READING FUNCTION WORKS PROPERLY. IF BOTS ADDED EACH OTHER AS FRIENDS WITHOUT PROBLEM, THAT MEANS EVERYTHING IS FINE. IF NOT, CHANGE YOUR FARM NAME TO SOMETHING READABLE (IF BOT READED YOUR FARM NAME WRONG, PLEASE OPEN NXRTH_CONFIG.INI AND DELETE FARM NAME INFO).") return u8"ПРОВЕРЬТЕ ФУНКЦИЮ ЧТЕНИЯ НАЗВАНИЯ ФЕРМЫ. ЕСЛИ БОТЫ ДОБАВИЛИ ДРУГ ДРУГА БЕЗ ПРОБЛЕМ - ВСЕ ОТЛИЧНО. ЕСЛИ НЕТ, ИЗМЕНИТЕ НАЗВАНИЕ ФЕРМЫ НА ЧИТАЕМОЕ (ЕСЛИ БОТ ПРОЧИТАЛ ОШИБОЧНО, УДАЛИТЕ НАЗВАНИЕ ИЗ NXRTH_CONFIG.INI).";
-        if (s == "5. Remote & Webhook") return u8"5. Удаленное управление и Webhook";
-        if (s == "You can always configure Remote & Webhook feature in Remote & Webhook Tab.") return u8"Вы всегда можете настроить Webhook во вкладке Remote & Webhook.";
-        if (s == "Type !id in my server to get your Discord id. To use Remote Control in Discord, You have to enter your discord id and Press \"Save Settings\" in Settings Tab.") return u8"Введите !id на моем сервере, чтобы получить Discord ID. Введите его и нажмите \"Save Settings\" в Настройках.";
-        if (s == "Current remote controls are:") return u8"Текущие команды удаленного управления:";
-        if (s == "[Note: <instanceid> is 1,2,3,4,5,6. For example 1 returns screenshot of first Memu.]") return u8"[Примечание: <instanceid> это 1,2,3,4,5,6. Например, 1 вернет скриншот первого Memu.]";
-        if (s == "!status returns status of the bots to the Webhook.") return u8"!status возвращает статус ботов в Webhook.";
-        if (s == "!start <instanceid> (starts memu + hayday + bot. if both memu and hayday already open its ok.)") return u8"!start <instanceid> (запускает memu + hayday + бота. Если уже открыты - всё ок.)";
-        if (s == "!ss <instanceid> (sends screenshot of the instance to the webhook address.)") return u8"!ss <instanceid> (отправляет скриншот в webhook.)";
-        if (s == "!ssall sends screenshots of the active instances at the same time.") return u8"!ssall отправляет скриншоты всех активных инстансов.";
-        if (s == "!stop <instanceid> stops the bot.") return u8"!stop <instanceid> останавливает бота.";
-        if (s == "!stopall This is emergency command. Stops all bots at once.") return u8"!stopall Экстренная команда. Останавливает всех ботов.";
-        if (s == "For Telegram:") return u8"Для Telegram:";
-        if (s == "Create your own telegram bot. You can search on Google for this.") return u8"Создайте своего Telegram бота. Инструкции есть в Google.";
-        if (s == "Enter your telegram bot token and chat id") return u8"Введите токен бота Telegram и chat id";
-        if (s == "Press Save settings in Settings tab.") return u8"Нажмите Save settings в Настройках.";
-        if (s == "Enabling Webhook only sends status of the barn after each sale cycle.") return u8"Включение Webhook отправляет статус амбара только после каждого цикла продаж.";
-        if (s == "My number reading can make mistakes, you better enable send screenshot with webhook if you really care.") return u8"Мое чтение чисел может ошибаться, лучше включите отправку скриншотов через webhook.";
-    }
-
-    // ==========================================================
-    // 5 - ALMANCA (GERMAN)
-    // ==========================================================
-    else if (g_Language == 5) {
-        if (s == "DASHBOARD") return u8"ARMATURENBRETT";
-        if (s == "BOT MANAGER") return u8"BOT-MANAGER";
-        if (s == "REMOTE & WEBHOOK") return u8"FERNSTEUERUNG & WEBHOOK";
-        if (s == "SETTINGS") return u8"EINSTELLUNGEN";
-        if (s == "LOGS") return u8"PROTOKOLLE";
-        if (s == "TEMPLATES") return u8"VORLAGEN";
-        if (s == "Active Instances: %d/4") return u8"Aktive Instanzen: %d/4";
-        if (s == "User: %s") return u8"Benutzer: %s";
-        if (s == "License Expiring! (%d Days)") return u8"Lizenz läuft ab! (%d Tage)";
-        if (s == "Days Left: %d") return u8"Verbleibende Tage: %d";
-
-        if (s == "INSTANCES OVERVIEW") return u8"INSTANZEN-ÜBERSICHT";
-        if (s == "TOTAL RUNTIME") return u8"GESAMTE LAUFZEIT";
-        if (s == "TOTAL HARVEST / SALES") return u8"GESAMTE ERNTE / VERKÄUFE";
-        if (s == "TOTAL COINS") return u8"GESAMTE MÜNZEN";
-        if (s == "TOTAL DIAMONDS") return u8"GESAMTE DIAMANTEN";
-        if (s == "INSTANCE #%d") return u8"INSTANZ #%d";
-        if (s == "[ONLINE]") return u8"[ONLINE]";
-        if (s == "[OFFLINE]") return u8"[OFFLINE]";
-        if (s == "ADB: %s") return u8"ADB Port: %s";
-        if (s == "Slot: %s") return u8"Slot: %s";
-        if (s == "Farm: %s | Lvl: %d") return u8"Farm: %s | Lvl: %d";
-        if (s == "Tag: %s") return u8"Tag: %s";
-        if (s == "Barn: Bolt: %d | Tape: %d | Plank: %d") return u8"Scheune: Bolzen: %d | Klebeband: %d | Brett: %d";
-        if (s == "Silo: Nail: %d | Screw: %d | Panel: %d") return u8"Silo: Nagel: %d | Schraube: %d | Platte: %d";
-        if (s == "Harvests: %d | Sales: %d") return u8"Ernten: %d | Verkäufe: %d";
-        if (s == "Status: %s") return u8"Status: %s";
-        if (s == "Enable this instance in 'Bot Manager'") return u8"Aktivieren Sie diese Instanz im 'Bot-Manager'";
-
-        if (s == "BOT INSTANCE MANAGER") return u8"BOT-INSTANZ-MANAGER";
-        if (s == "Instance #") return u8"Bot #";
-        if (s == "CONNECTION SETTINGS") return u8"VERBINDUNGSEINSTELLUNGEN";
-        if (s == "Enable This Instance") return u8"Diesen Bot aktivieren";
-        if (s == "(Target Port: %s)") return u8"(Zielport: %s)";
-        if (s == "ADB Serial/Port##adb") return u8"ADB Seriell/Port##adb";
-        if (s == "Example: 127.0.0.1:21503 for MEmu 1") return u8"Beispiel: 127.0.0.1:21503 für MEmu 1";
-        if (s == "Input Device (Touchscreen):") return u8"Eingabegerät (Touchscreen):";
-        if (s == "VM Name##vm") return u8"VM-Name##vm";
-        if (s == "Auto Detect") return u8"Automatisch erkennen";
-        if (s == "TOOLS & DIAGNOSTICS") return u8"WERKZEUGE & TESTS";
-        if (s == "Select Mode:") return u8"Erntemodus wählen:";
-        if (s == "Wheat (2m)") return u8"Weizen (2m)";
-        if (s == "Corn (5m)") return u8"Mais (5m)";
-        if (s == "Carrot (10m)") return u8"Karotte (10m)";
-        if (s == "Soybean (20m)") return u8"Sojabohne (20m)";
-        if (s == "Sugarcane (30m)") return u8"Zuckerrohr (30m)";
-        if (s == "TEST SEED") return u8"SAATGUT TESTEN";
-        if (s == "TEST GROWN") return u8"WACHSTUM TESTEN";
-        if (s == "TEST FIELD") return u8"FELD TESTEN";
-        if (s == "TEST SICKLE") return u8"SICHEL TESTEN";
-
-        if (s == "ACCOUNT MANAGER") return u8"KONTO-MANAGER";
-        if (s == "Slot ") return u8"Slot ";
-        if (s == " (SELECTED)") return u8" (AUSGEWÄHLT)";
-        if (s == " [SAVED]") return u8" [GESPEICHERT]";
-        if (s == "Actions:") return u8"Aktionen:";
-        if (s == "Slot Selector") return u8"Slot-Auswahl";
-        if (s == "SAVE SLOT DATA") return u8"SLOT-DATEN SPEICHERN";
-        if (s == "LOAD SLOT DATA") return u8"SLOT-DATEN LADEN";
-        if (s == "LAUNCH MEMU + HAY DAY") return u8"MEMU + HAY DAY STARTEN";
-        if (s == "START BOT") return u8"BOT STARTEN";
-        if (s == "STOP BOT") return u8"BOT STOPPEN";
-
-        if (s == "Account Management") return u8"Kontoverwaltung";
-        if (s == "TRANSFER ACCOUNTS BETWEEN INSTANCES") return u8"KONTEN ZWISCHEN INSTANZEN ÜBERTRAGEN";
-        if (s == "MOVE ACCOUNT") return u8"KONTO VERSCHIEBEN";
-        if (s == "CREATE NEW ACCOUNT (WIPE GAME DATA)") return u8"NEUES KONTO ERSTELLEN (DATEN LÖSCHEN)";
-        if (s == "WIPE DATA & CREATE NEW") return u8"DATEN LÖSCHEN & NEU ERSTELLEN";
-
-        if (s == "Auto Tom Config") return u8"Auto-Tom-Konfiguration";
-        if (s == "AUTOMATED TOM MANAGER") return u8"AUTOMATISCHER TOM-MANAGER";
-        if (s == "Enable Auto Tom For This Slot") return u8"Auto-Tom für diesen Slot aktivieren";
-        if (s == "Remaining Hours") return u8"Verbleibende Stunden";
-        if (s == "Search Category") return u8"Suchkategorie";
-        if (s == "Barn") return u8"Scheune";
-        if (s == "Silo") return u8"Silo";
-        if (s == "Item Search Name") return u8"Name des gesuchten Gegenstands";
-        if (s == "ACCEPT ITEM NAME") return u8"NAME AKZEPTIEREN";
-
-        if (s == "Farm Inspector") return u8"Farm-Inspektor";
-        if (s == "LIVE FARM OVERVIEW & INVENTORY") return u8"LIVE-FARM-ÜBERSICHT & INVENTAR";
-
-        if (s == "GLOBAL APPLICATION SETTINGS") return u8"GLOBALE ANWENDUNGSEINSTELLUNGEN";
-        if (s == "SAVE ALL SETTINGS") return u8"ALLE EINSTELLUNGEN SPEICHERN";
-        if (s == "ADB Executable Path:") return u8"ADB.exe Pfad:";
-        if (s == "MEmu Console Path:") return u8"MEmuConsole.exe Pfad:";
-        if (s == "Browse") return u8"Durchsuchen";
-        if (s == "Browse##memu") return u8"Durchsuchen##memu";
-
-        if (s == "CLEAR LOGS") return u8"PROTOKOLLE LÖSCHEN";
-        if (s == "Auto-Scroll") return u8"Autom. Scrollen";
-        if (s == "Filter:") return u8"Filter:";
-        if (s == "ALL") return u8"ALLE";
-        if (s == "INST #1") return u8"BOT #1";
-        if (s == "[SYSTEM]") return u8"[SYSTEM]";
-
-        if (s == "TEMPLATE CONFIGURATION & MAKER") return u8"VORLAGEN-KONFIGURATION & ERSTELLER";
-        if (s == "Configuration") return u8"Konfiguration";
-        if (s == "Template Maker") return u8"Vorlagen-Ersteller";
-        if (s == "TAKE SCREENSHOT (Save to /templates)") return u8"SCREENSHOT ERSTELLEN";
-
-        if (s == "Username:") return u8"Benutzername:";
-        if (s == "Password:") return u8"Passwort:";
-        if (s == "Your Hardware ID (HWID):") return u8"Ihre Hardware-ID (HWID):";
-        if (s == "Copy HWID") return u8"HWID kopieren";
-        if (s == "LOGIN TO DASHBOARD") return u8"ANMELDEN";
-
-        if (s == "ACCEPTING FRIEND REQUEST") return u8"AKZEPTIEREN DER FREUNDSCHAFTSANFRAGE";
-        if (s == "Account Cycle Done. Moving to next...") return u8"Konto-Zyklus abgeschlossen. Weiter zum nächsten...";
-        if (s == "Account Leveled Up! Claiming rewards...") return u8"Konto aufgestiegen! Belohnungen werden eingefordert...";
-        if (s == "Account Saved & Encrypted Successfully.") return u8"Konto erfolgreich gespeichert & verschlüsselt.";
-        if (s == "Account Switched. Game Restarting.") return u8"Konto gewechselt. Spiel wird neu gestartet.";
-        if (s == "Account successfully moved!") return u8"Konto erfolgreich verschoben!";
-        if (s == "All retries failed. Moving on.") return u8"Alle Versuche fehlgeschlagen. Weiter geht's.";
-        if (s == "All visible fields are planted successfully.") return u8"Alle sichtbaren Felder wurden erfolgreich bepflanzt.";
-        if (s == "App Launched.") return u8"App gestartet.";
-        if (s == "Auto Tom cycle complete! He will wake up in 2 hours.") return u8"Auto Tom-Zyklus abgeschlossen! Er wacht in 2 Stunden auf.";
-        if (s == "BOT Started.") return u8"BOT gestartet.";
-        if (s == "BOT Stopped by User.") return u8"BOT vom Benutzer gestoppt.";
-        if (s == "BOT Stopped via Emergency Remote Command.") return u8"BOT durch Notfall-Fernbefehl gestoppt.";
-        if (s == "BOT Stopped via Remote Command.") return u8"BOT durch Fernbefehl gestoppt.";
-        if (s == "Bot Started.") return u8"Bot gestartet.";
-        if (s == "Checking Auto Tom...") return u8"Überprüfe Auto Tom...";
-        if (s == "Checking Game Load...") return u8"Überprüfe Spielladung...";
-        if (s == "Checking Harvest...") return u8"Überprüfe Ernte...";
-        if (s == "Checking Plant...") return u8"Überprüfe Bepflanzung...";
-        if (s == "Checking Sales...") return u8"Überprüfe Verkäufe...";
-        if (s == "Closing all menus to return to main screen...") return u8"Schließe alle Menüs, um zum Hauptbildschirm zurückzukehren...";
-        if (s == "Closing stuck menu before returning to farm...") return u8"Schließe feststeckendes Menü vor der Rückkehr zur Farm...";
-        if (s == "Collecting Items...") return u8"Gegenstände sammeln...";
-        if (s == "Collecting coins...") return u8"Münzen sammeln...";
-        if (s == "Cycle Done") return u8"Zyklus abgeschlossen";
-        if (s == "Cycle End Cleanup...") return u8"Zyklusende-Bereinigung...";
-        if (s == "Data wiped successfully! Launch game to start fresh.") return u8"Daten erfolgreich gelöscht! Spiel starten, um neu zu beginnen.";
-        if (s == "Decrypting & Switching Account...") return u8"Entschlüssele & wechsle Konto...";
-        if (s == "Deploying Auto Tom...") return u8"Auto Tom wird entsendet...";
-        if (s == "Detecting Input...") return u8"Eingabe wird erkannt...";
-        if (s == "ERROR: Shop not found or didn") return u8"FEHLER: Shop nicht gefunden oder hat nicht";
-        if (s == "ERROR: Target not found on Radar!") return u8"FEHLER: Ziel auf dem Radar nicht gefunden!";
-        if (s == "ERROR: Waited 45s but Farm bot got stuck. Going home.") return u8"FEHLER: 45s gewartet, aber Farm-Bot steckt fest. Gehe nach Hause.";
-        if (s == "ERROR: friends.png NOT FOUND on screen!") return u8"FEHLER: friends.png NICHT auf dem Bildschirm GEFUNDEN!";
-        if (s == "Emergency Sales...") return u8"Notverkäufe...";
-        if (s == "Entered the shop. Initiating Heist Session...") return u8"Shop betreten. Starte Transfer-Sitzung...";
-        if (s == "Entering Sales Mode...") return u8"Wechsle in den Verkaufsmodus...";
-        if (s == "Error: Config file missing!") return u8"Fehler: Konfigurationsdatei fehlt!";
-        if (s == "Error: Could not read list. Check ADB path.") return u8"Fehler: Liste konnte nicht gelesen werden. ADB-Pfad prüfen.";
-        if (s == "Error: File decryption failed! Corrupted data.") return u8"Fehler: Datei-Entschlüsselung fehlgeschlagen! Beschädigte Daten.";
-        if (s == "Error: Slot file empty or missing!") return u8"Fehler: Slot-Datei leer oder fehlt!";
-        if (s == "Error: languages.csv missing in injecthacks folder!") return u8"Fehler: languages.csv fehlt im injecthacks-Ordner!";
-        if (s == "Error: themes.csv missing in folder!") return u8"Fehler: themes.csv fehlt im Ordner!";
-        if (s == "Executing Webhook Routine (Checking for Transfer)...") return u8"Führe Webhook-Routine aus (Prüfung auf Transfer)...";
-        if (s == "Extracting Profile Data...") return u8"Profildaten extrahieren...";
-        if (s == "Failed to open shop menu. Skipping sales.") return u8"Fehler beim Öffnen des Shop-Menüs. Verkäufe werden übersprungen.";
-        if (s == "Failed. Defaulting to /dev/input/event1") return u8"Fehlgeschlagen. Standardwert /dev/input/event1 wird verwendet";
-        if (s == "Field position mapped and saved!") return u8"Feldposition erfasst und gespeichert!";
-        if (s == "Files Injected Successfully!") return u8"Dateien erfolgreich injiziert!";
-        if (s == "Focusing on search text box...") return u8"Fokussiere auf das Suchtextfeld...";
-        if (s == "Font Hack Injected! Start game manually.") return u8"Font-Hack injiziert! Spiel manuell starten.";
-        if (s == "Friend request accepted! Moving directly to infiltration...") return u8"Freundschaftsanfrage akzeptiert! Gehe direkt zur Infiltration...";
-        if (s == "Friend request sent successfully!") return u8"Freundschaftsanfrage erfolgreich gesendet!";
-        if (s == "Friend request signal received. Accepting...") return u8"Signal für Freundschaftsanfrage empfangen. Akzeptiere...";
-        if (s == "Game Loaded! Mailbox found.") return u8"Spiel geladen! Briefkasten gefunden.";
-        if (s == "Game Ready.") return u8"Spiel bereit.";
-        if (s == "Grown crops detected via Color! Opening sickle menu...") return u8"Ausgewachsene Pflanzen durch Farbe erkannt! Öffne Sichel-Menü...";
-        if (s == "HEIST ABORTED: Shop is completely full!") return u8"TRANSFER ABGEBROCHEN: Shop ist komplett voll!";
-        if (s == "HEIST ABORTED: Storage bot cancelled the operation!") return u8"TRANSFER ABGEBROCHEN: Lager-Bot hat die Operation abgebrochen!";
-        if (s == "HEIST ABORTED: Storage bot failed to infiltrate!") return u8"TRANSFER ABGEBROCHEN: Infiltration durch Lager-Bot fehlgeschlagen!";
-        if (s == "HEIST ERROR: Could not verify shop is open after multiple tries!") return u8"TRANSFER-FEHLER: Konnte nach mehreren Versuchen nicht verifizieren, dass der Shop offen ist!";
-        if (s == "HEIST ERROR: Storage bot didn") return u8"TRANSFER-FEHLER: Lager-Bot hat nicht";
-        if (s == "HEIST FAILED: Could not send request.") return u8"TRANSFER FEHLGESCHLAGEN: Anfrage konnte nicht gesendet werden.";
-        if (s == "HEIST: All items transferred. Telling Storage Bot to go home.") return u8"TRANSFER: Alle Items übertragen. Sage Lager-Bot, er soll nach Hause gehen.";
-        if (s == "HEIST: Friendship accepted! Closing menus and re-entering shop...") return u8"TRANSFER: Freundschaft akzeptiert! Schließe Menüs und betrete Shop erneut...";
-        if (s == "HEIST: I have more items! Telling Storage Bot to wait...") return u8"TRANSFER: Ich habe mehr Items! Sage Lager-Bot, er soll warten...";
-        if (s == "HEIST: Item Listed! GO GO GO!") return u8"TRANSFER: Item gelistet! LOS LOS LOS!";
-        if (s == "HEIST: Not friends with storage. Initiating handshake...") return u8"TRANSFER: Nicht mit dem Lager befreundet. Initiiere Handshake...";
-        if (s == "HEIST: Shop didn") return u8"TRANSFER: Shop hat nicht";
-        if (s == "HEIST: Shop found, tapping...") return u8"TRANSFER: Shop gefunden, tippe an...";
-        if (s == "HEIST: Shop not visible yet, waiting...") return u8"TRANSFER: Shop noch nicht sichtbar, warte...";
-        if (s == "HEIST: Shop verified as open!") return u8"TRANSFER: Shop als geöffnet verifiziert!";
-        if (s == "HEIST: Transfer complete. Collecting coins...") return u8"TRANSFER: Übertragung abgeschlossen. Münzen einsammeln...";
-        if (s == "Harvest interrupted by SILO FULL! Forcing emergency sales...") return u8"Ernte durch VOLLEN SILO unterbrochen! Erzwinge Notverkäufe...";
-        if (s == "Heist Failed! Seller didn") return u8"Transfer fehlgeschlagen! Verkäufer hat nicht";
-        if (s == "Heist Successful! Item secured.") return u8"Transfer erfolgreich! Item gesichert.";
-        if (s == "INFILTRATING: ") return u8"INFILTRIEREN: ";
-        if (s == "ITEM LISTED! Waiting 800ms for network sync...") return u8"ITEM GELISTET! Warte 800ms auf Netzwerksynchronisation...";
-        if (s == "Initiating Auto Tom sequence...") return u8"Initiiere Auto Tom-Sequenz...";
-        if (s == "Injecting NXRTH Font & Language Hack...") return u8"Injiziere NXRTH Font & Language Hack...";
-        if (s == "Injecting important files for hacks...") return u8"Injiziere wichtige Dateien für Hacks...";
-        if (s == "Item Sold.") return u8"Item verkauft.";
-        if (s == "LISTENING FOR SIGNALS") return u8"AUF SIGNALE WARTEN";
-        if (s == "Launching Application...") return u8"Starte Anwendung...";
-        if (s == "No crops to sell.") return u8"Keine Pflanzen zum Verkaufen.";
-        if (s == "No more items to transfer. Finishing heist session.") return u8"Keine weiteren Items zu übertragen. Beende Transfer-Sitzung.";
-        if (s == "Not enough coins for Max Stack! Falling back to Mid...") return u8"Nicht genug Münzen für Max-Stapel! Falle auf Mitte zurück...";
-        if (s == "Opening Tom Boxes...") return u8"Öffne Tom-Boxen...";
-        if (s == "Optimization Applied. Restarting Game.") return u8"Optimierung angewendet. Starte Spiel neu.";
-        if (s == "Optimizing View Distance...") return u8"Optimiere Sichtweite...";
-        if (s == "Performing deep system cleanup to prevent Game Not Responding Error...") return u8"Führe tiefgreifende Systembereinigung durch, um Fehler 'Spiel reagiert nicht' zu verhindern...";
-        if (s == "Placing Advertisement...") return u8"Schalte Anzeige...";
-        if (s == "Plant incomplete or failed. Suspecting false positive or stuck menu. Retrying...") return u8"Bepflanzung unvollständig oder fehlgeschlagen. Vermute falschen Alarm oder blockiertes Menü. Erneuter Versuch...";
-        if (s == "Purchase confirmed! Waiting 30s for Tom to deliver...") return u8"Kauf bestätigt! Warte 30s auf Toms Lieferung...";
-        if (s == "Put on sale button not found.") return u8"Zum Verkauf anbieten-Button nicht gefunden.";
-        if (s == "RADAR ERROR: Name found but acceptfq.png missing on that row!") return u8"RADAR-FEHLER: Name gefunden, aber acceptfq.png fehlt in dieser Zeile!";
-        if (s == "RADAR ERROR: Target [") return u8"RADAR-FEHLER: Ziel [";
-        if (s == "RADAR: Green tick matched with name! Accepting...") return u8"RADAR: Grüner Haken stimmt mit Namen überein! Akzeptieren...";
-        if (s == "RADAR: Initializing System...") return u8"RADAR: Initialisiere System...";
-        if (s == "RADAR: Mode 0 Active. Switching to ") return u8"RADAR: Modus 0 Aktiv. Wechsle zu ";
-        if (s == "RADAR: Mode 1 Active. Scanning ") return u8"RADAR: Modus 1 Aktiv. Scannen nach ";
-        if (s == "RADAR: Request found! Scanning for green tick on the same row...") return u8"RADAR: Anfrage gefunden! Scanne nach grünem Haken in derselben Zeile...";
-        if (s == "RADAR: Scanning for -> [") return u8"RADAR: Scannen nach -> [";
-        if (s == "RADAR: Skipping menu open, already inside Friend Book.") return u8"RADAR: Überspringe Menüöffnung, bereits im Freundebuch.";
-        if (s == "RADAR: Target found! Double clicking: [") return u8"RADAR: Ziel gefunden! Doppelklick: [";
-        if (s == "RADAR: Target not found here. Scrolling 50 pixels down...") return u8"RADAR: Ziel hier nicht gefunden. Scrolle 50 Pixel nach unten...";
-        if (s == "RADIO: Transfer triggered! (") return u8"FUNK: Transfer ausgelöst! (";
-        if (s == "Reading Account Profile Data...") return u8"Lese Konto-Profildaten...";
-        if (s == "Remote Command: ") return u8"Fernbefehl: ";
-        if (s == "Remote Start: Waking up Emulator...") return u8"Fernstart: Wecke Emulator auf...";
-        if (s == "Removing Winter Theme...") return u8"Entferne Winter-Design...";
-        if (s == "Resuming Harvest...") return u8"Ernte fortsetzen...";
-        if (s == "Retrying Harvest...") return u8"Ernte wird erneut versucht...";
-        if (s == "Retrying Plant...") return u8"Bepflanzung wird erneut versucht...";
-        if (s == "Returning to Home Base...") return u8"Rückkehr zur Heimatbasis...";
-        if (s == "Returning to farm to complete the interrupted harvest...") return u8"Rückkehr zur Farm, um die unterbrochene Ernte abzuschließen...";
-        if (s == "Rotation Delta Report Sent!") return u8"Rotations-Delta-Bericht gesendet!";
-        if (s == "SIGNAL RECEIVED! Target: [") return u8"SIGNAL EMPFANGEN! Ziel: [";
-        if (s == "SIGNAL RECEIVED: Farm bot has more items! Waiting in shop...") return u8"SIGNAL EMPFANGEN: Farm-Bot hat mehr Items! Warte im Shop...";
-        if (s == "SILO FULL DETECTED! Harvest interrupted.") return u8"VOLLER SILO ERKANNT! Ernte unterbrochen.";
-        if (s == "Save Failed. Check Settings.") return u8"Speichern fehlgeschlagen. Überprüfe die Einstellungen.";
-        if (s == "Saved location missing, searching crate again...") return u8"Gespeicherter Ort fehlt, suche Kiste erneut...";
-        if (s == "Saved location missing, searching crate to collect...") return u8"Gespeicherter Ort fehlt, suche Kiste zum Einsammeln...";
-        if (s == "Saving & Encrypting Account Data...") return u8"Speichere & verschlüssele Kontodaten...";
-        if (s == "Scanning Fields...") return u8"Scanne Felder...";
-        if (s == "Scanning for Grown Crops...") return u8"Scanne nach ausgewachsenen Pflanzen...";
-        if (s == "Screenshot failed: Empty frame.") return u8"Screenshot fehlgeschlagen: Leeres Frame.";
-        if (s == "Seed Found. Calculating boundary box...") return u8"Samen gefunden. Berechne Begrenzungsrahmen...";
-        if (s == "Seed menu NOT opened or seed missing. Breaking plant loop.") return u8"Samen-Menü NICHT geöffnet oder Samen fehlt. Breche Pflanzschleife ab.";
-        if (s == "Sending friend request to Storage (") return u8"Sende Freundschaftsanfrage an Lager (";
-        if (s == "Settings saved to nxrth_config.ini") return u8"Einstellungen gespeichert in nxrth_config.ini";
-        if (s == "Shop is full.") return u8"Shop ist voll.";
-        if (s == "Sickle Found! Calculating harvest zone...") return u8"Sichel gefunden! Berechne Erntezone...";
-        if (s == "Single Account Cycle Done. Waiting for crops...") return u8"Einzelkonto-Zyklus abgeschlossen. Warte auf Pflanzen...";
-        if (s == "Single Account Mode") return u8"Einzelkonto-Modus";
-        if (s == "Single Account Mode Active.") return u8"Einzelkonto-Modus aktiv.";
-        if (s == "Single mode auto-detected. Skipping game restart.") return u8"Einzelmodus automatisch erkannt. Spielneustart wird übersprungen.";
-        if (s == "Skipped Sales (Random)") return u8"Verkäufe übersprungen (Zufällig)";
-        if (s == "Skipping normal sales check due to Emergency Sales.") return u8"Überspringe normale Verkaufsprüfung aufgrund von Notverkäufen.";
-        if (s == "Starting Emulator Environment...") return u8"Starte Emulator-Umgebung...";
-        if (s == "Still poor! Falling back to Min Stack...") return u8"Immer noch arm! Falle auf Minimalstapel zurück...";
-        if (s == "Storage Auto-Transfer Activated. Listening on encrypted radio channel...") return u8"Lager Auto-Transfer aktiviert. Höre auf verschlüsseltem Funkkanal...";
-        if (s == "Storage Auto-Transfer Mode Halted.") return u8"Lager Auto-Transfer-Modus angehalten.";
-        if (s == "Storage Master is online. Waiting for signals...") return u8"Lager-Meister ist online. Warte auf Signale...";
-        if (s == "Swapper Error: Source and Destination cannot be the same!") return u8"Wechsler-Fehler: Quelle und Ziel dürfen nicht gleich sein!";
-        if (s == "Swapper Error: Source slot is empty!") return u8"Wechsler-Fehler: Quell-Slot ist leer!";
-        if (s == "TARGET LOCKED! Applying +30 X Offset & Executing Snipe...") return u8"ZIEL ERFASST! Wende +30 X-Offset an & Führe Snipe aus...";
-        if (s == "Timeout (Mailbox not found). Skipping account.") return u8"Zeitüberschreitung (Briefkasten nicht gefunden). Konto wird übersprungen.";
-        if (s == "Tom contract expired! Auto Tom disabled.") return u8"Tom-Vertrag abgelaufen! Auto Tom deaktiviert.";
-        if (s == "Tom delivered! Collecting items...") return u8"Tom hat geliefert! Gegenstände sammeln...";
-        if (s == "Tom deployed. Waiting 30s for him to return...") return u8"Tom entsendet. Warte 30s auf seine Rückkehr...";
-        if (s == "Tom is back! Clicking saved Crate location...") return u8"Tom ist zurück! Klicke auf gespeicherten Kistenort...";
-        if (s == "Tom menu failed to open after 3 retries! Aborting sequence.") return u8"Tom-Menü konnte nach 3 Versuchen nicht geöffnet werden! Sequenz abgebrochen.";
-        if (s == "WAITING FRIEND ACCEPT") return u8"WARTE AUF FREUNDESAKZEPTANZ";
-        if (s == "WAITING STORAGE BOSS") return u8"WARTE AUF LAGER-BOSS";
-        if (s == "WARNING: home.png not found! Using fallback coordinate.") return u8"WARNUNG: home.png nicht gefunden! Verwende Ersatzkoordinate.";
-        if (s == "Waking up Minitouch agent and opening ports...") return u8"Wecke Minitouch-Agent auf und öffne Ports...";
-        if (s == "Winter Theme Removed! Start game manually.") return u8"Winter-Design entfernt! Spiel manuell starten.";
-        if (s == "Wiping game data to create new account...") return u8"Lösche Spieldaten, um neues Konto zu erstellen...";
-        if (s == "[ERROR] Minitouch connection failed!") return u8"[FEHLER] Minitouch-Verbindung fehlgeschlagen!";
-        if (s == "[INFO] Executing DENSE GRID  Gesture...") return u8"[INFO] Führe DICHTES RASTER-Geste aus...";
-        if (s == "[INFO] Executing DYNAMIC GRID Sweep...") return u8"[INFO] Führe DYNAMISCHEN RASTER-Scan aus...";
-        if (s == "[SUCCESS] Dynamic Grid complete!") return u8"[ERFOLG] Dynamisches Raster abgeschlossen!";
-        if (s == "[SUCCESS] Grid Sweep  completed seamlessly!") return u8"[ERFOLG] Raster-Scan nahtlos abgeschlossen!";
-        if (s == "Want to ask something? ping me @inna in server. i will reply asap.") return u8"Willst du etwas fragen? Ping mich @inna im Server an. Ich antworte so schnell wie möglich.";
-        if (s == "1. Initial Setup & Minitouch") return u8"1. Ersteinrichtung & Minitouch";
-        if (s == "Before starting, you must click Inject Important Files. Without this you won't be able to use the bot. it injects Minitouch, Zoom, Font, Field color changer all in one.") return u8"Vor dem Start musst du auf Inject Important Files klicken. Ohne das kannst du den Bot nicht nutzen. Es injiziert Minitouch, Zoom, Schriftart und Feldfarbwechsler.";
-        if (s == "2. Bot Manager & Accounts") return u8"2. Bot-Manager & Konten";
-        if (s == "Modes: Single Account Mode: It just plants, harvests, sells and repeats. Multi Account Mode: Bot Plants, Harvests, sells, changes account, repeats. After all accounts done, return to first account and so on.") return u8"Modi: Einzelkonto-Modus: Pflanzt, erntet, verkauft und wiederholt. Multi-Konto-Modus: Pflanzt, erntet, verkauft, wechselt Konto, wiederholt. Danach zurück zum ersten Konto.";
-        if (s == "To enable this you must Save your accounts. Enables automatically.") return u8"Um dies zu aktivieren, musst du deine Konten speichern (Save). Aktiviert sich automatisch.";
-        if (s == "How to save account : Create New account in Account management tab, After skipping tutorials and getting to farm level 7, Press \"Save Slot Data\".") return u8"So speicherst du ein Konto: Erstelle ein neues Konto im Tab Kontoverwaltung, drücke nach Erreichen von Level 7 auf \"Save Slot Data\".";
-        if (s == "If you want to change accounts manually you can press \"Load Slot Data\". Dont press this if you haven't saved account yet.") return u8"Zum manuellen Kontowechsel drücke \"Load Slot Data\". Nicht drücken, wenn du noch kein Konto gespeichert hast.";
-        if (s == "IMPORTANT NOTE: DO NOT SAVE SUPERCELL ID ACCOUNTS BECAUSE YOU WILL GET COOKIES POP-UP AND BOT WONT WORK.") return u8"WICHTIGER HINWEIS: SPEICHERE KEINE SUPERCELL ID-KONTEN, DA SONST DAS COOKIES-POPUP ERSCHEINT UND DER BOT NICHT FUNKTIONIERT.";
-        if (s == "3. Auto Tom") return u8"3. Auto Tom";
-        if (s == "Read These Carefully or your bot can break.") return u8"Lies dies sorgfältig, sonst kann dein Bot kaputt gehen.";
-        if (s == "To use Auto Tom, make sure Tom is not on Cooldown.") return u8"Stelle sicher, dass Tom keinen Cooldown hat, um Auto Tom zu nutzen.";
-        if (s == "if bot can't find tom's crate, then make your own template.") return u8"Wenn der Bot Toms Kiste nicht findet, erstelle dein eigenes Template.";
-        if (s == "4. Auto Transfer Bem/Sem") return u8"4. Auto-Transfer Bem/Sem";
-        if (s == "You have to enable instance 6 and put an account there. it will Work as storage account there.") return u8"Du musst Instanz 6 aktivieren und dort ein Konto hinterlegen. Es fungiert als Lager.";
-        if (s == "DONT ADD FRIEND YOUR BOTS MANUALLY. yes, you heard it. IF you already added your bots, please remove them. my bot will automatically add friend.") return u8"FÜGE DEINE BOTS NICHT MANUELL ALS FREUND HINZU. Ja, richtig gehört. WENN du sie schon hinzugefügt hast, entferne sie bitte. Der Bot fügt sie automatisch hinzu.";
-        if (s == "TEST IF FARM NAME READING FUNCTION WORKS PROPERLY. IF BOTS ADDED EACH OTHER AS FRIENDS WITHOUT PROBLEM, THAT MEANS EVERYTHING IS FINE. IF NOT, CHANGE YOUR FARM NAME TO SOMETHING READABLE (IF BOT READED YOUR FARM NAME WRONG, PLEASE OPEN NXRTH_CONFIG.INI AND DELETE FARM NAME INFO).") return u8"TESTE, OB DAS LESEN DES FARM-NAMENS FUNKTIONIERT. WENN DIE BOTS SICH PROBLEMLOS HINZUFÜGEN, IST ALLES IN ORDNUNG. WENN NICHT, ÄNDERE DEINEN FARM-NAMEN (WENN FALSCH GELESEN, LÖSCHE DIE INFO IN NXRTH_CONFIG.INI).";
-        if (s == "5. Remote & Webhook") return u8"5. Fernsteuerung & Webhook";
-        if (s == "You can always configure Remote & Webhook feature in Remote & Webhook Tab.") return u8"Du kannst Remote & Webhook jederzeit im entsprechenden Tab konfigurieren.";
-        if (s == "Type !id in my server to get your Discord id. To use Remote Control in Discord, You have to enter your discord id and Press \"Save Settings\" in Settings Tab.") return u8"Tippe !id auf meinem Server für deine Discord-ID. Um die Fernsteuerung zu nutzen, trage die ID ein und drücke \"Save Settings\".";
-        if (s == "Current remote controls are:") return u8"Aktuelle Fernbedienungsbefehle:";
-        if (s == "[Note: <instanceid> is 1,2,3,4,5,6. For example 1 returns screenshot of first Memu.]") return u8"[Hinweis: <instanceid> ist 1,2,3,4,5,6. Beispiel: 1 liefert einen Screenshot des ersten Memu.]";
-        if (s == "!status returns status of the bots to the Webhook.") return u8"!status sendet den Bot-Status an den Webhook.";
-        if (s == "!start <instanceid> (starts memu + hayday + bot. if both memu and hayday already open its ok.)") return u8"!start <instanceid> (startet memu + hayday + bot. Wenn beides schon offen ist, kein Problem.)";
-        if (s == "!ss <instanceid> (sends screenshot of the instance to the webhook address.)") return u8"!ss <instanceid> (sendet Screenshot der Instanz an den Webhook.)";
-        if (s == "!ssall sends screenshots of the active instances at the same time.") return u8"!ssall sendet Screenshots aller aktiven Instanzen.";
-        if (s == "!stop <instanceid> stops the bot.") return u8"!stop <instanceid> stoppt den Bot.";
-        if (s == "!stopall This is emergency command. Stops all bots at once.") return u8"!stopall Dies ist ein Notfallbefehl. Stoppt alle Bots auf einmal.";
-        if (s == "For Telegram:") return u8"Für Telegram:";
-        if (s == "Create your own telegram bot. You can search on Google for this.") return u8"Erstelle deinen eigenen Telegram-Bot. Auf Google gibt es Anleitungen.";
-        if (s == "Enter your telegram bot token and chat id") return u8"Gib dein Telegram-Bot-Token und die Chat-ID ein";
-        if (s == "Press Save settings in Settings tab.") return u8"Drücke auf \"Save Settings\" im Settings-Tab.";
-        if (s == "Enabling Webhook only sends status of the barn after each sale cycle.") return u8"Wenn Webhook aktiviert ist, wird nur der Scheunenstatus nach jedem Verkaufszyklus gesendet.";
-        if (s == "My number reading can make mistakes, you better enable send screenshot with webhook if you really care.") return u8"Meine Zahlenerkennung kann Fehler machen, aktiviere besser das Senden von Screenshots per Webhook.";
-    }
-
-    return text; // Hiçbiri tutmazsa orijinal İngilizceyi yansıt
+    if (text == nullptr) return "";
+    if (g_Language <= 0 || g_Language >= kLanguageCount) return text;
+
+    const TranslationLookup& lookup = GetTranslationLookup();
+    auto match = lookup.find(text);
+    if (match == lookup.end()) return text;
+
+    const char* translated = match->second->values[g_Language - 1];
+    return (translated != nullptr && translated[0] != '\0') ? translated : text;
 }

@@ -19,6 +19,7 @@
 #include <sstream>
 #include <fstream>
 #include <algorithm>
+#include <cctype>
 #include <intrin.h>
 #include <filesystem>
 #include <direct.h>
@@ -108,11 +109,33 @@ GLuint icon_question = 0;
 // --- GLOBAL SETTINGS ---
 char g_AdbPathBuf[260] = "C:\\Program Files\\Microvirt\\MEmu\\adb.exe";
 char g_MEmuPathBuf[260] = "C:\\Program Files\\Microvirt\\MEmu\\MEmuConsole.exe";
-bool g_AdbValid = true;
-bool g_MEmuValid = true;
+bool g_AdbValid = false;
+bool g_MEmuValid = false;
 bool g_EnableDiscordRPC = true;
 bool g_SeparateTemplates = false;
 bool g_EnableWebhookImage = false; 
+
+enum class PathValidationError {
+    None,
+    Empty,
+    NotFound,
+    NotAFile,
+    UnexpectedFileName
+};
+
+struct PathValidationState {
+    PathValidationError adbError = PathValidationError::Empty;
+    PathValidationError consoleError = PathValidationError::Empty;
+    std::string expectedConsoleFile = "MEmuConsole.exe";
+
+    bool AllValid() const {
+        return adbError == PathValidationError::None &&
+            consoleError == PathValidationError::None;
+    }
+};
+
+PathValidationState g_PathValidation;
+std::atomic<bool> g_EmulatorPathsReady = false;
 
 
 // Path's
@@ -364,6 +387,7 @@ char g_LicenseKey[256] = "";
 int g_CurrentTab = 0; // current tab in the GUI
 int g_SelectedInstanceUI = 0; // selected instance
 extern void RunEmulatorFactory(int requestedInstance); // Defining the function in botengine.cpp
+bool RequireValidEmulatorPaths(int instanceId = -1);
 
 std::chrono::steady_clock::time_point g_BotStartTime;
 
@@ -383,11 +407,54 @@ std::string OpenFileDialog(const char* filter = "PNG Files\0*.png\0All Files\0*.
     return "";
 }
 // Checks if the paths are correct
+std::string ToLowerAscii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+        });
+    return value;
+}
+
+PathValidationError ValidateExecutablePath(const char* rawPath, const char* expectedFileName) {
+    if (rawPath == nullptr || rawPath[0] == '\0') {
+        return PathValidationError::Empty;
+    }
+
+    std::error_code ec;
+    fs::path path(rawPath);
+    if (!fs::exists(path, ec) || ec) {
+        return PathValidationError::NotFound;
+    }
+    if (!fs::is_regular_file(path, ec) || ec) {
+        return PathValidationError::NotAFile;
+    }
+    if (ToLowerAscii(path.filename().string()) != ToLowerAscii(expectedFileName)) {
+        return PathValidationError::UnexpectedFileName;
+    }
+    return PathValidationError::None;
+}
+
+bool AreEmulatorPathsValid() {
+    return g_EmulatorPathsReady.load(std::memory_order_acquire);
+}
+
 void ValidatePaths() {
-    g_AdbValid = fs::exists(g_AdbPathBuf);
-    g_MEmuValid = fs::exists(g_MEmuPathBuf);
-    if (g_AdbValid) kAdbPath = std::string(g_AdbPathBuf);
-    if (g_MEmuValid) kMEmuConsolePath = std::string(g_MEmuPathBuf);
+    g_PathValidation.expectedConsoleFile =
+        (g_GlobalEmulatorMode == 1) ? "ldconsole.exe" : "MEmuConsole.exe";
+    g_PathValidation.adbError = ValidateExecutablePath(g_AdbPathBuf, "adb.exe");
+    g_PathValidation.consoleError =
+        ValidateExecutablePath(g_MEmuPathBuf, g_PathValidation.expectedConsoleFile.c_str());
+
+    g_AdbValid = (g_PathValidation.adbError == PathValidationError::None);
+    g_MEmuValid = (g_PathValidation.consoleError == PathValidationError::None);
+
+    const bool allValid = g_PathValidation.AllValid();
+    if (allValid) {
+        const std::string nextAdbPath(g_AdbPathBuf);
+        const std::string nextConsolePath(g_MEmuPathBuf);
+        if (kAdbPath != nextAdbPath) kAdbPath = nextAdbPath;
+        if (kMEmuConsolePath != nextConsolePath) kMEmuConsolePath = nextConsolePath;
+    }
+    g_EmulatorPathsReady.store(allValid, std::memory_order_release);
 }
 // settings saver
 void SaveConfig() {
@@ -600,6 +667,9 @@ int g_VisionTexWidth = 0;
 int g_VisionTexHeight = 0;
 std::atomic<bool> g_VisionLiveRunning = false;
 int g_VisionSelectedInst = 0;
+std::mutex g_DebugOutputMutex;
+std::string g_DebugOutput;
+std::atomic<bool> g_DebugCommandRunning = false;
 // Crash logger
 
 LONG WINAPI NxrthCrashHandler(EXCEPTION_POINTERS* ExceptionInfo) {
@@ -729,7 +799,7 @@ void RenderCustomTitleBar(GLFWwindow* window) {
     ImGui::SetCursorPosX(15);
     ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), "NXRTH");
     ImGui::SameLine();
-    ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "MULTI BOT");
+    ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1.0f), Tr("MULTI BOT"));
 
     if (ImGui::IsWindowHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
         POINT cursorPos;
@@ -759,10 +829,6 @@ void RenderCustomTitleBar(GLFWwindow* window) {
             strncpy(g_AdbPathBuf, "C:\\Program Files\\Microvirt\\MEmu\\adb.exe", 260);
             strncpy(g_MEmuPathBuf, "C:\\Program Files\\Microvirt\\MEmu\\MEmuConsole.exe", 260);
 
-            // UPDATE PATHS IN THE BOT TOO.
-            kAdbPath = "C:\\Program Files\\Microvirt\\MEmu\\adb.exe";
-            kMEmuConsolePath = "C:\\Program Files\\Microvirt\\MEmu\\MEmuConsole.exe";
-
             for (int i = 0; i < (int)g_Bots.size(); i++) {
                 g_Bots[i].emulatorType = 0;
                 std::string dp = "127.0.0.1:" + std::to_string(21503 + (i * 10));
@@ -774,10 +840,6 @@ void RenderCustomTitleBar(GLFWwindow* window) {
         else { // LDPlayer SELECTED
             strncpy(g_AdbPathBuf, "C:\\LDPlayer\\LDPlayer9\\adb.exe", 260);
             strncpy(g_MEmuPathBuf, "C:\\LDPlayer\\LDPlayer9\\ldconsole.exe", 260);
-
-            // UPDATE PATHS IN THE BOT TOO.
-            kAdbPath = "C:\\LDPlayer\\LDPlayer9\\adb.exe";
-            kMEmuConsolePath = "C:\\LDPlayer\\LDPlayer9\\ldconsole.exe";
 
             for (int i = 0; i < (int)g_Bots.size(); i++) {
                 g_Bots[i].emulatorType = 1;
@@ -916,6 +978,7 @@ void ModernButton(const char* label, GLuint icon, int id, int& current) {
 
 // STARTS EMULATOR AND THE GAME! FUNCTION NAME IS MEMUANDGAME BUT IT ALSO WORKS WITH LDPLAYER BECAUSE I AM TOO LAZY TO CHANGE IT.
 void StartMEmuAndGame(int instanceId) {
+    if (!RequireValidEmulatorPaths(instanceId)) return;
     AddLog(instanceId, "Starting Emulator Environment...", ImVec4(0, 1, 1, 1));
 
     std::thread([instanceId]() {
@@ -1015,6 +1078,176 @@ void RenderTemplateRow(const char* label, char* buffer, size_t bufferSize, std::
     ImGui::PopID();
 }
 
+void RenderPathValidationReason(PathValidationError error, const char* expectedFileName) {
+    switch (error) {
+    case PathValidationError::Empty:
+        ImGui::TextWrapped("%s", Tr("Path is empty."));
+        break;
+    case PathValidationError::NotFound:
+        ImGui::TextWrapped("%s", Tr("File not found!"));
+        break;
+    case PathValidationError::NotAFile:
+        ImGui::TextWrapped("%s", Tr("Path must point to a file."));
+        break;
+    case PathValidationError::UnexpectedFileName:
+        ImGui::TextWrapped(Tr("Expected executable: %s"), expectedFileName);
+        break;
+    default:
+        break;
+    }
+}
+
+void RenderPathValidationError(const char* label, PathValidationError error, const char* expectedFileName) {
+    if (error == PathValidationError::None) return;
+
+    ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f), "%s", label);
+    ImGui::SameLine();
+    RenderPathValidationReason(error, expectedFileName);
+}
+
+void RenderPathValidationTooltip(PathValidationError error, const char* expectedFileName) {
+    if (!ImGui::IsItemHovered()) return;
+    ImGui::BeginTooltip();
+    RenderPathValidationReason(error, expectedFileName);
+    ImGui::EndTooltip();
+}
+
+void RenderPathValidationDetails() {
+    RenderPathValidationError(
+        Tr("ADB Executable Path:"),
+        g_PathValidation.adbError,
+        "adb.exe");
+
+    const char* consoleLabel = (g_GlobalEmulatorMode == 1)
+        ? Tr("LDPlayer Console Path:")
+        : Tr("MEmu Console Path:");
+    RenderPathValidationError(
+        consoleLabel,
+        g_PathValidation.consoleError,
+        g_PathValidation.expectedConsoleFile.c_str());
+}
+
+bool RequireValidEmulatorPaths(int instanceId) {
+    if (AreEmulatorPathsValid()) return true;
+    AddLog(
+        instanceId,
+        Tr("Action blocked: Please correct your PATHs in Settings."),
+        ImVec4(1.0f, 0.25f, 0.2f, 1.0f));
+    return false;
+}
+
+bool HasRunningPathDependentTasks() {
+    if (g_VisionLiveRunning.load()) return true;
+    for (const BotInstance& bot : g_Bots) {
+        if (bot.isRunning) return true;
+    }
+    return false;
+}
+
+void StopRunningPathDependentTasks() {
+    g_VisionLiveRunning = false;
+    for (int i = 0; i < (int)g_Bots.size(); ++i) {
+        if (!g_Bots[i].isRunning) continue;
+        g_Bots[i].isRunning = false;
+        g_Bots[i].statusText = "STOPPED";
+        AddLog(i, Tr("BOT Stopped by User."), ImVec4(1.0f, 0.5f, 0.5f, 1.0f));
+    }
+    AddLog(
+        -1,
+        Tr("Running tasks stopped because emulator paths are invalid."),
+        ImVec4(1.0f, 0.5f, 0.2f, 1.0f));
+}
+
+void RenderSettingsPathErrorPanel() {
+    if (AreEmulatorPathsValid()) return;
+
+    const int invalidCount = (g_AdbValid ? 0 : 1) + (g_MEmuValid ? 0 : 1);
+    const float panelHeight = (invalidCount > 1) ? 118.0f : 94.0f;
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.24f, 0.055f, 0.045f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.9f, 0.2f, 0.12f, 1.0f));
+    ImGui::BeginChild(
+        "SettingsPathErrorPanel",
+        ImVec2(0, panelHeight),
+        true,
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    if (icon_warning != 0) {
+        ImGui::Image((void*)(intptr_t)icon_warning, ImVec2(22, 22));
+        ImGui::SameLine();
+    }
+    ImGui::TextColored(
+        ImVec4(1.0f, 0.4f, 0.25f, 1.0f),
+        "%s",
+        Tr("Please correct your PATHs in Settings."));
+    ImGui::Spacing();
+    RenderPathValidationDetails();
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor(2);
+}
+
+void RenderGlobalPathErrorModal() {
+    const bool pathsValid = AreEmulatorPathsValid();
+    std::string popupLabel =
+        std::string(Tr("PATH CONFIGURATION ERROR")) + "###PathConfigurationError";
+
+    if (!pathsValid && g_CurrentTab != 3) {
+        ImGui::OpenPopup(popupLabel.c_str());
+    }
+
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(
+        viewport->GetCenter(),
+        ImGuiCond_Appearing,
+        ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal(
+        popupLabel.c_str(),
+        nullptr,
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+        if (pathsValid || g_CurrentTab == 3) {
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
+
+        if (icon_warning != 0) {
+            ImGui::Image((void*)(intptr_t)icon_warning, ImVec2(34, 34));
+            ImGui::SameLine();
+        }
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.35f, 0.2f, 1.0f),
+            "%s",
+            Tr("Please correct your PATHs in Settings."));
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        RenderPathValidationDetails();
+        ImGui::Spacing();
+        ImGui::TextDisabled(
+            "%s",
+            Tr("Path-dependent actions are disabled until both paths are valid."));
+        ImGui::Spacing();
+
+        if (ImGui::Button(Tr("OPEN SETTINGS"), ImVec2(220, 38))) {
+            g_CurrentTab = 3;
+            ImGui::CloseCurrentPopup();
+        }
+
+        if (HasRunningPathDependentTasks()) {
+            ImGui::SameLine();
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.72f, 0.16f, 0.12f, 1.0f));
+            if (ImGui::Button(Tr("STOP RUNNING TASKS"), ImVec2(220, 38))) {
+                StopRunningPathDependentTasks();
+            }
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
 void RenderApp() {
     ValidatePaths();
     ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -1048,11 +1281,12 @@ void RenderApp() {
         ModernButton(Tr("SETTINGS"), settingsIconToUse, 3, g_CurrentTab);
         ModernButton(Tr("HOW TO USE"), icon_question, 6, g_CurrentTab);
         ModernButton(Tr("BOT VISION"), icon_dashboard, 7, g_CurrentTab);
+        ModernButton(Tr("BUG FIX / DEBUG"), icon_warning, 8, g_CurrentTab);
         ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 120);
         ImGui::Separator();
 
         ImGui::SetNextItemWidth(180);
-        ImGui::Combo("##Lang", &g_Language, "English\0Türkçe\0Español\0Português\0Русский\0Deutsch\0");
+        ImGui::Combo("##Lang", &g_Language, GetLanguageNames(), GetLanguageCount());
         if (ImGui::IsItemDeactivatedAfterEdit()) SaveConfig();
 
         ImGui::Spacing();
@@ -1243,7 +1477,7 @@ void RenderApp() {
                             int savedAccs = 0;
                             for (int i = 0; i < 10; i++) if (bot.accounts[i].hasFile) savedAccs++;
 
-                            ImGui::TextColored(ImVec4(0, 1, 1, 1), "SYSTEM ARCHITECTURE & MAINTENANCE");
+                            ImGui::TextColored(ImVec4(0, 1, 1, 1), Tr("BOT MODE & MAINTENANCE"));
                             ImGui::Separator();
                             ImGui::Spacing();
 
@@ -1253,7 +1487,7 @@ void RenderApp() {
                             // LEFT COLUMN
                             // ---------------------------------------------------------
                             // SINGLE MODE
-                            if (ImGui::Checkbox("Enable Single Mode", &bot.useSingleMode)) {
+                            if (ImGui::Checkbox(Tr("Enable Single Mode"), &bot.useSingleMode)) {
                                 bot.useMultiMode = !bot.useSingleMode;
                             }
 
@@ -1264,29 +1498,29 @@ void RenderApp() {
                                 bot.useMultiMode = false;
                             }
 
-                            if (ImGui::Checkbox("Enable Multi Mode (Account rotation)", &bot.useMultiMode)) {
+                            if (ImGui::Checkbox(Tr("Enable Multi Mode (Account rotation)"), &bot.useMultiMode)) {
                                 bot.useSingleMode = !bot.useMultiMode;
                             }
 
                             if (multiLock && ImGui::IsItemHovered()) {
-                                ImGui::SetTooltip("You have to Save at least 2 farms to be able to enable this!");
+                                ImGui::SetTooltip("%s", Tr("Save at least two farms to enable this mode."));
                             }
                             if (multiLock) ImGui::PopStyleVar();
 
                             // REVIVE MODE
                             if (bot.useSingleMode) {
                                 ImGui::Spacing();
-                                ImGui::Checkbox("Enable Revive Mode", &bot.useReviveMode);
-                                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Scans for the template you enter(could be anything & custom) after X seconds. If cant find 3 times, re-opens game.");
+                                ImGui::Checkbox(Tr("Enable Revive Mode"), &bot.useReviveMode);
+                                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Tr("Checks the selected template periodically. The game restarts after three failed checks."));
 
                                 if (bot.useReviveMode) {
                                     ImGui::SetNextItemWidth(140); 
-                                    ImGui::SliderInt("Check (Sec)", &bot.reviveCheckInterval, 60, 600);
+                                    ImGui::SliderInt(Tr("Check Interval (seconds)"), &bot.reviveCheckInterval, 60, 600);
 
                                     ImGui::SetNextItemWidth(140);
-                                    ImGui::InputText("Custom Template", bot.reviveTemplatePath, MAX_PATH);
+                                    ImGui::InputText(Tr("Custom Template"), bot.reviveTemplatePath, MAX_PATH);
                                     ImGui::SameLine();
-                                    if (ImGui::Button("Browse##revive")) {
+                                    if (ImGui::Button(Tr("Browse##revive"))) {
                                         std::string path = OpenFileDialog();
                                         if (!path.empty()) strncpy(bot.reviveTemplatePath, path.c_str(), MAX_PATH);
                                     }
@@ -1299,17 +1533,17 @@ void RenderApp() {
                             // RIGHT COLUMN
                             // ---------------------------------------------------------
                             ImGui::BeginChild("JanitorSet", ImVec2(0, 130), true); 
-                            ImGui::TextColored(ImVec4(0.35f, 0.65f, 0.98f, 1.0f), "System Maintenance (The Janitor)");
+                            ImGui::TextColored(ImVec4(0.35f, 0.65f, 0.98f, 1.0f), Tr("AUTOMATIC MAINTENANCE"));
                             ImGui::Separator();
                             ImGui::Spacing();
 
-                            ImGui::Checkbox("Enable Auto RAM & Cache Cleaner", &bot.enableJanitor);
-                            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Prevents Memory Leaks by restarting the emulator completely after X cycles.");
+                            ImGui::Checkbox(Tr("Enable Automatic RAM & Cache Cleanup"), &bot.enableJanitor);
+                            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", Tr("Restarts the emulator after the selected number of cycles to release memory."));
 
                             if (bot.enableJanitor) {
                                 ImGui::Spacing();
                                 ImGui::SetNextItemWidth(180);
-                                ImGui::SliderInt("Clean Every X Cycles", &bot.janitorLimit, 3, 50);
+                                ImGui::SliderInt(Tr("Cleanup Interval (cycles)"), &bot.janitorLimit, 3, 50);
                             }
                             ImGui::EndChild();
 
@@ -1356,8 +1590,10 @@ void RenderApp() {
                                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.85f, 1.0f));
                                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.95f, 1.0f));
                                 if (ImGui::Button(Tr(" CREATE NEW MEMU\n& AUTO-LINK"), ImVec2(220, 50))) {
-                                    g_Bots[i].isCreatingEmulator = true;
-                                    std::thread([i]() { RunEmulatorFactory(i); }).detach();
+                                    if (RequireValidEmulatorPaths(i)) {
+                                        g_Bots[i].isCreatingEmulator = true;
+                                        std::thread([i]() { RunEmulatorFactory(i); }).detach();
+                                    }
                                 }
                                 ImGui::PopStyleColor(2);
                             }
@@ -1392,7 +1628,7 @@ void RenderApp() {
 
                                 ImGui::Spacing();
                                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.8f, 1.0f));
-                                if (ImGui::Button("Inject Important Files", ImVec2(200, 60))) {
+                                if (ImGui::Button(Tr("INJECT IMPORTANT FILES"), ImVec2(200, 60))) {
                                     InjectImportantFiles(i);
                                 }
                                 ImGui::PopStyleColor();
@@ -1424,10 +1660,12 @@ void RenderApp() {
                                 else {
                                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
                                     if (ImGui::Button(Tr("START BOT"), ImVec2(250, 55))) {
-                                        g_Bots[i].isRunning = true;
-                                        g_Bots[i].statusText = "STARTING...";
-                                        AddLog(i, "BOT Started.", ImVec4(0, 1, 0, 1));
-                                        std::thread([i]() { RunPremiumBot(i); }).detach();
+                                        if (RequireValidEmulatorPaths(i)) {
+                                            g_Bots[i].isRunning = true;
+                                            g_Bots[i].statusText = "STARTING...";
+                                            AddLog(i, "Starting bot...", ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
+                                            std::thread([i]() { RunPremiumBot(i); }).detach();
+                                        }
                                     }
                                     ImGui::PopStyleColor();
                                 }
@@ -1546,7 +1784,9 @@ void RenderApp() {
                                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.95f, 0.60f, 0.20f, 1.0f));
                                     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.75f, 0.40f, 0.00f, 1.0f));
                                     if (ImGui::Button(Tr("SAVE GAME TO THIS SLOT"), ImVec2(250, 40))) {
-                                        std::thread([i, acc]() { SaveAccountToSlot(i, acc); }).detach();
+                                        if (RequireValidEmulatorPaths(i)) {
+                                            std::thread([i, acc]() { SaveAccountToSlot(i, acc); }).detach();
+                                        }
                                     }
                                     ImGui::PopStyleColor(3);
 
@@ -1558,7 +1798,9 @@ void RenderApp() {
                                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.70f, 0.95f, 1.0f));
                                     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.10f, 0.50f, 0.75f, 1.0f));
                                     if (ImGui::Button(Tr("LOAD SLOT TO EMULATOR"), ImVec2(250, 40))) {
-                                        std::thread([i, acc]() { LoadAccountFromSlot(i, acc); }).detach();
+                                        if (RequireValidEmulatorPaths(i)) {
+                                            std::thread([i, acc]() { LoadAccountFromSlot(i, acc); }).detach();
+                                        }
                                     }
                                     ImGui::PopStyleColor(3);
                                     if (!currAcc.hasFile) ImGui::EndDisabled();
@@ -1654,16 +1896,18 @@ void RenderApp() {
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
                     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.5f, 0.0f, 0.0f, 1.0f));
                     if (ImGui::Button(Tr("WIPE DATA & CREATE NEW"), ImVec2(250, 40))) {
-                        int targetInst = wipeInst;
-                        std::thread([targetInst]() {
-                            AddLog(targetInst, Tr("Wiping game data to create new account..."), ImVec4(1, 0.5f, 0, 1));
-                            RunAdbCommand(targetInst, "shell am force-stop com.supercell.hayday");
-                            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                            RunAdbCommand(targetInst, "shell rm /data/data/com.supercell.hayday/shared_prefs/storage.xml");
-                            RunAdbCommand(targetInst, "shell rm /data/data/com.supercell.hayday/shared_prefs/storage_new.xml");
-                            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                            AddLog(targetInst, Tr("Data wiped successfully! Launch game to start fresh."), ImVec4(0, 1, 0, 1));
-                            }).detach();
+                        if (RequireValidEmulatorPaths(wipeInst)) {
+                            int targetInst = wipeInst;
+                            std::thread([targetInst]() {
+                                AddLog(targetInst, Tr("Wiping game data to create new account..."), ImVec4(1, 0.5f, 0, 1));
+                                RunAdbCommand(targetInst, "shell am force-stop com.supercell.hayday");
+                                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                                RunAdbCommand(targetInst, "shell rm /data/data/com.supercell.hayday/shared_prefs/storage.xml");
+                                RunAdbCommand(targetInst, "shell rm /data/data/com.supercell.hayday/shared_prefs/storage_new.xml");
+                                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                                AddLog(targetInst, Tr("Data wiped successfully! Launch game to start fresh."), ImVec4(0, 1, 0, 1));
+                                }).detach();
+                        }
                     }
                     ImGui::PopStyleColor(3);
                     ImGui::EndTabItem();
@@ -1934,13 +2178,14 @@ void RenderApp() {
                     ImGui::Spacing(); ImGui::Spacing();
 
                     if (ImGui::Button(Tr("TAKE SCREENSHOT (Save to /templates)"), ImVec2(320, 50))) {
-                        strcpy(tmplStatus, Tr("Capturing..."));
-                        tmplColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+                        if (RequireValidEmulatorPaths(tmplInst)) {
+                            strcpy(tmplStatus, Tr("Capturing..."));
+                            tmplColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
 
-                        std::thread([]() {
-                            int inst = tmplInst;
-                            std::string currentAdb = GetUniversalAdbPath(inst);
-                            cv::Mat rawScreen = CaptureInstanceScreen(inst, currentAdb, g_Bots[inst].adbSerial);
+                            std::thread([]() {
+                                int inst = tmplInst;
+                                std::string currentAdb = GetUniversalAdbPath(inst);
+                                cv::Mat rawScreen = CaptureInstanceScreen(inst, currentAdb, g_Bots[inst].adbSerial);
 
                             if (rawScreen.empty()) {
                                 strcpy(tmplStatus, Tr("Error: Could not capture screen!"));
@@ -1975,7 +2220,8 @@ void RenderApp() {
                                 strcpy(tmplStatus, Tr("Exception: File write error."));
                                 tmplColor = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
                             }
-                            }).detach();
+                                }).detach();
+                        }
                     }
 
                     ImGui::SameLine();
@@ -2013,12 +2259,14 @@ void RenderApp() {
             }
             ImGui::EndChild();
 			ImGui::Separator(); ImGui::Spacing();
-            ImGui::Text("This tab used to have remote commands, which helped users to control their bot from away. since i drop this project, i deleted that part.");
+            ImGui::TextWrapped(Tr("Remote commands are no longer available. Webhook notifications remain available above."));
         }
 
         if (g_CurrentTab == 3) {
             ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), Tr("GLOBAL APPLICATION SETTINGS"));
             ImGui::Separator(); ImGui::Spacing();
+            RenderSettingsPathErrorPanel();
+            if (!AreEmulatorPathsValid()) ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
             if (ImGui::Button(Tr("SAVE ALL SETTINGS"), ImVec2(-1, 35))) {
                 SaveConfig();
@@ -2042,12 +2290,15 @@ void RenderApp() {
             if (!g_AdbValid && icon_warning != 0) {
                 ImGui::SameLine();
                 ImGui::Image((void*)(intptr_t)icon_warning, ImVec2(20, 20));
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip(Tr("File not found!"));
+                RenderPathValidationTooltip(g_PathValidation.adbError, "adb.exe");
             }
 
             ImGui::Spacing();
 
-            ImGui::Text(Tr("Emulator Console Path:"));
+            const char* consolePathLabel = (g_GlobalEmulatorMode == 1)
+                ? Tr("LDPlayer Console Path:")
+                : Tr("MEmu Console Path:");
+            ImGui::Text("%s", consolePathLabel);
             ImGui::PushItemWidth(inputWidth);
             if (!g_MEmuValid) ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.1f, 0.1f, 1.0f));
             ImGui::InputText("##memupath", g_MEmuPathBuf, IM_ARRAYSIZE(g_MEmuPathBuf));
@@ -2061,7 +2312,9 @@ void RenderApp() {
             if (!g_MEmuValid && icon_warning != 0) {
                 ImGui::SameLine();
                 ImGui::Image((void*)(intptr_t)icon_warning, ImVec2(20, 20));
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip(Tr("File not found!"));
+                RenderPathValidationTooltip(
+                    g_PathValidation.consoleError,
+                    g_PathValidation.expectedConsoleFile.c_str());
             }
 
             ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
@@ -2100,7 +2353,7 @@ void RenderApp() {
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::TextWrapped(Tr("Want to ask something? ping me @Nxr in server. i will reply asap."));
+            ImGui::TextWrapped(Tr("Need help? Contact @Nxr on the server."));
             ImGui::Spacing(); ImGui::Spacing();
 
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.12f, 0.12f, 1.00f));
@@ -2111,7 +2364,7 @@ void RenderApp() {
             ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
             if (ImGui::CollapsingHeader(Tr("1. Initial Setup & Minitouch"), ImGuiTreeNodeFlags_DefaultOpen)) {
                 ImGui::Indent();
-                ImGui::TextWrapped(Tr("Before starting, you must click Inject Important Files. Without this you won't be able to use the bot. it injects Minitouch, Zoom, Font, Field color changer all in one."));
+                ImGui::TextWrapped(Tr("Before starting the bot, use Inject Important Files once for each emulator. It installs Minitouch and the required game assets."));
                 ImGui::Unindent();
                 ImGui::Spacing();
             }
@@ -2119,14 +2372,14 @@ void RenderApp() {
             // 2. BOT MANAGER
             if (ImGui::CollapsingHeader(Tr("2. Bot Manager & Accounts"))) {
                 ImGui::Indent();
-                ImGui::TextWrapped(Tr("Modes: Single Account Mode: It just plants, harvests, sells and repeats. Multi Account Mode: Bot Plants, Harvests, sells, changes account, repeats. After all accounts done, return to first account and so on."));
+                ImGui::TextWrapped(Tr("Single-account mode repeats farming and sales on one account. Multi-account mode performs the same cycle and rotates through saved accounts."));
                 ImGui::Spacing();
-                ImGui::TextWrapped(Tr("To enable Multi account mode, you must Save at least 2 accounts and enable in bot config tab."));
+                ImGui::TextWrapped(Tr("Save at least two accounts before enabling multi-account mode in Bot Manager."));
                 ImGui::Spacing();
-                ImGui::TextWrapped(Tr("How to save account : Create New account in Account management tab, After skipping tutorials and getting to farm level 7, Press \"Save Slot Data\"."));
-                ImGui::TextWrapped(Tr("If you want to change accounts manually you can press \"Load Slot Data\". Dont press this if you haven't saved account yet."));
+                ImGui::TextWrapped(Tr("To save an account, finish the tutorial, reach farm level 7, then use Save Game in Account Manager."));
+                ImGui::TextWrapped(Tr("Use Load Slot to switch accounts manually. Only load slots that contain saved data."));
                 ImGui::Spacing();
-                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("IMPORTANT NOTE: DO NOT SAVE SUPERCELL ID ACCOUNTS BECAUSE YOU WILL GET COOKIES POP-UP AND BOT WONT WORK."));
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("Do not save Supercell ID accounts. The cookie dialog can prevent automation from working."));
                 ImGui::Unindent();
                 ImGui::Spacing();
             }
@@ -2134,10 +2387,9 @@ void RenderApp() {
             // 3. AUTO TOM
             if (ImGui::CollapsingHeader(Tr("3. Auto Tom"))) {
                 ImGui::Indent();
-                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), Tr("Read These Carefully or your bot can break."));
-				ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("WARNING!!! I Quitted developing this bot project, and auto tom was not done. IT MAY NOT WORK PERFECTLY."));
-                ImGui::TextWrapped(Tr("To use Auto Tom, make sure Tom is not on Cooldown."));
-                ImGui::TextWrapped(Tr("if bot can't find tom's crate, then make your own template."));
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), Tr("Auto Tom is experimental and may require custom templates."));
+                ImGui::TextWrapped(Tr("Make sure Tom is available before enabling Auto Tom."));
+                ImGui::TextWrapped(Tr("If Tom's crate is not detected, create a custom template from a fresh screenshot."));
                 ImGui::Unindent();
                 ImGui::Spacing();
             }
@@ -2145,12 +2397,12 @@ void RenderApp() {
             // 4. AUTO TRANSFER BEM/SEM
             if (ImGui::CollapsingHeader(Tr("4. Auto Transfer Bem/Sem"))) {
                 ImGui::Indent();
-                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("WARNING!!! I Quitted developing this bot project, and auto transfer bem/sem was not done. IT MAY NOT WORK PERFECTLY."));
-                ImGui::TextWrapped(Tr("You have to enable instance 6 and put an account there. it will Work as storage account there."));
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("Automatic BEM/SEM transfer is experimental."));
+                ImGui::TextWrapped(Tr("Enable instance 6 and assign the storage account to it."));
                 ImGui::Spacing();
-                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("DONT ADD FRIEND YOUR BOTS MANUALLY. yes, you heard it. IF you already added your bots, please remove them. my bot will automatically add friend."));
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), Tr("Do not add bot accounts as friends manually. Automatic pairing handles friend requests."));
                 ImGui::Spacing();
-                ImGui::TextWrapped(Tr("TEST IF FARM NAME READING FUNCTION WORKS PROPERLY. IF BOTS ADDED EACH OTHER AS FRIENDS WITHOUT PROBLEM, THAT MEANS EVERYTHING IS FINE. IF NOT, CHANGE YOUR FARM NAME TO SOMETHING READABLE (IF BOT READED YOUR FARM NAME WRONG, PLEASE OPEN NXRTH_CONFIG.INI AND DELETE FARM NAME INFO)."));
+                ImGui::TextWrapped(Tr("Verify that farm names are detected correctly. If a name is read incorrectly, use a simpler farm name and remove the cached farm-name entry from nxrth_config.ini."));
                 ImGui::Unindent();
                 ImGui::Spacing();
             }
@@ -2158,25 +2410,11 @@ void RenderApp() {
             // 5. REMOTE & WEBHOOK
             if (ImGui::CollapsingHeader(Tr("5. Remote & Webhook"))) {
                 ImGui::Indent();
-                ImGui::TextWrapped(Tr("You can always configure Remote & Webhook feature in Remote & Webhook Tab."));
-                ImGui::TextWrapped(Tr("Type !id in my server to get your Discord id. To use Remote Control in Discord, You have to enter your discord id and Press \"Save Settings\" in Settings Tab."));
+                ImGui::TextWrapped(Tr("Configure webhook notifications from the Remote & Webhook tab."));
+                ImGui::TextWrapped(Tr("Remote commands are no longer supported."));
                 ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), Tr("Current remote controls are:"));
-                ImGui::TextDisabled(Tr("[Note: <instanceid> is 1,2,3,4,5,6. For example 1 returns screenshot of first Memu.]"));
-                ImGui::BulletText(Tr("!status returns status of the bots to the Webhook."));
-                ImGui::BulletText(Tr("!start <instanceid> (starts memu + hayday + bot. if both memu and hayday already open its ok.)"));
-                ImGui::BulletText(Tr("!ss <instanceid> (sends screenshot of the instance to the webhook address.)"));
-                ImGui::BulletText(Tr("!ssall sends screenshots of the active instances at the same time."));
-                ImGui::BulletText(Tr("!stop <instanceid> stops the bot."));
-                ImGui::BulletText(Tr("!stopall This is emergency command. Stops all bots at once."));
-                ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), Tr("For Telegram:"));
-                ImGui::TextWrapped(Tr("Create your own telegram bot. You can search on Google for this."));
-                ImGui::TextWrapped(Tr("Enter your telegram bot token and chat id"));
-                ImGui::TextWrapped(Tr("Press Save settings in Settings tab."));
-                ImGui::Spacing();
-                ImGui::TextWrapped(Tr("Enabling Webhook only sends status of the barn after each sale cycle."));
-                ImGui::TextWrapped(Tr("My number reading can make mistakes, you better enable send screenshot with webhook if you really care."));
+                ImGui::TextWrapped(Tr("Webhook notifications can send barn status after each sale cycle."));
+                ImGui::TextWrapped(Tr("Enable screenshot attachments when you need to verify detected inventory values."));
                 ImGui::Unindent();
                 ImGui::Spacing();
             }
@@ -2201,17 +2439,19 @@ void RenderApp() {
 
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
             if (ImGui::Button(Tr("TAKE SNAPSHOT (Single Scan)"), ImVec2(250, 40))) {
-                g_VisionLiveRunning = false; 
-                std::thread([]() {
-                    int inst = g_VisionSelectedInst;
-                    std::string currentAdb = GetUniversalAdbPath(inst);
-                    cv::Mat raw = CaptureInstanceScreen(inst, currentAdb, g_Bots[inst].adbSerial);
-                    if (!raw.empty()) {
-                        cv::Mat processed = ProcessVisionFrame(inst, raw);
-                        std::lock_guard<std::mutex> lock(g_VisionMutex);
-                        g_VisionMat = processed; 
-                    }
-                    }).detach();
+                if (RequireValidEmulatorPaths(g_VisionSelectedInst)) {
+                    g_VisionLiveRunning = false;
+                    std::thread([]() {
+                        int inst = g_VisionSelectedInst;
+                        std::string currentAdb = GetUniversalAdbPath(inst);
+                        cv::Mat raw = CaptureInstanceScreen(inst, currentAdb, g_Bots[inst].adbSerial);
+                        if (!raw.empty()) {
+                            cv::Mat processed = ProcessVisionFrame(inst, raw);
+                            std::lock_guard<std::mutex> lock(g_VisionMutex);
+                            g_VisionMat = processed;
+                        }
+                        }).detach();
+                }
             }
             ImGui::PopStyleColor();
 
@@ -2227,21 +2467,23 @@ void RenderApp() {
             else {
                 ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.4f, 0.1f, 1.0f));
                 if (ImGui::Button(Tr("START LIVE DETECTION (1 FPS)"), ImVec2(250, 40))) {
-                    g_VisionLiveRunning = true;
-                    std::thread([]() {
-                        while (g_VisionLiveRunning) {
-                            int inst = g_VisionSelectedInst;
-                            std::string currentAdb = GetUniversalAdbPath(inst);
-                            cv::Mat raw = CaptureInstanceScreen(inst, currentAdb, g_Bots[inst].adbSerial);
-                            if (!raw.empty()) {
-                                cv::Mat processed = ProcessVisionFrame(inst, raw);
-                                std::lock_guard<std::mutex> lock(g_VisionMutex);
-                                g_VisionMat = processed;
+                    if (RequireValidEmulatorPaths(g_VisionSelectedInst)) {
+                        g_VisionLiveRunning = true;
+                        std::thread([]() {
+                            while (g_VisionLiveRunning) {
+                                int inst = g_VisionSelectedInst;
+                                std::string currentAdb = GetUniversalAdbPath(inst);
+                                cv::Mat raw = CaptureInstanceScreen(inst, currentAdb, g_Bots[inst].adbSerial);
+                                if (!raw.empty()) {
+                                    cv::Mat processed = ProcessVisionFrame(inst, raw);
+                                    std::lock_guard<std::mutex> lock(g_VisionMutex);
+                                    g_VisionMat = processed;
+                                }
+
+                                std::this_thread::sleep_for(std::chrono::seconds(1));
                             }
-                           
-                            std::this_thread::sleep_for(std::chrono::seconds(1));
-                        }
-                        }).detach();
+                            }).detach();
+                    }
                 }
                 ImGui::PopStyleColor();
             }
@@ -2271,6 +2513,75 @@ void RenderApp() {
             else {
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), Tr("No vision data available. Click a button above to scan."));
             }
+        }
+
+        if (g_CurrentTab == 8) {
+            ImGui::TextColored(ImVec4(0.85f, 0.65f, 0.12f, 1.0f), Tr("BUG FIX / DEBUG"));
+            ImGui::TextDisabled(Tr("Run quick diagnostics and inspect raw ADB output."));
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), Tr("ADB DEVICE DIAGNOSTICS"));
+            ImGui::TextDisabled(Tr("Runs the configured adb.exe with: adb devices"));
+            ImGui::TextDisabled(Tr("Configured ADB path: %s"), kAdbPath.c_str());
+            ImGui::Spacing();
+
+            if (g_DebugCommandRunning.load()) {
+                ImGui::BeginDisabled();
+                ImGui::Button(Tr("RUNNING ADB DEVICES..."), ImVec2(240, 40));
+                ImGui::EndDisabled();
+            }
+            else if (ImGui::Button(Tr("GET DEVICES LIST"), ImVec2(240, 40))) {
+                if (RequireValidEmulatorPaths()) {
+                    g_DebugCommandRunning = true;
+                    {
+                        std::lock_guard<std::mutex> lock(g_DebugOutputMutex);
+                        g_DebugOutput = std::string("$ adb devices\r\n") + Tr("Running...");
+                    }
+                    std::thread([]() {
+                        std::string output = GetAdbDevicesList();
+                        {
+                            std::lock_guard<std::mutex> lock(g_DebugOutputMutex);
+                            g_DebugOutput = output;
+                        }
+                        g_DebugCommandRunning = false;
+                        }).detach();
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button(Tr("COPY OUTPUT"), ImVec2(150, 40))) {
+                std::lock_guard<std::mutex> lock(g_DebugOutputMutex);
+                ImGui::SetClipboardText(g_DebugOutput.c_str());
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button(Tr("CLEAR OUTPUT"), ImVec2(150, 40))) {
+                std::lock_guard<std::mutex> lock(g_DebugOutputMutex);
+                g_DebugOutput.clear();
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            std::string debugOutputSnapshot;
+            {
+                std::lock_guard<std::mutex> lock(g_DebugOutputMutex);
+                debugOutputSnapshot = g_DebugOutput.empty()
+                    ? Tr("No command has been run yet.")
+                    : g_DebugOutput;
+            }
+
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.035f, 0.04f, 0.045f, 1.0f));
+            ImGui::BeginChild(
+                "DebugAdbOutput",
+                ImVec2(0, 0),
+                true,
+                ImGuiWindowFlags_HorizontalScrollbar);
+            ImGui::TextUnformatted(debugOutputSnapshot.c_str());
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
         }
 
 
@@ -2311,7 +2622,7 @@ int main() {
 
     SetPremiumTheme();
     LoadConfig();
-    if (g_Language == -1) {
+    if (g_Language < 0 || g_Language >= GetLanguageCount()) {
         AutoDetectLanguage(); 
         SaveConfig();
     }
@@ -2362,6 +2673,7 @@ int main() {
         ImGui::PopStyleVar(2);
 
         RenderApp();
+        RenderGlobalPathErrorModal();
 
         ImGui::Render();
 

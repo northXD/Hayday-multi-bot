@@ -12,6 +12,8 @@ void StartMEmuAndGame(int instanceId);
 void ExecuteDenseGridGesture(int instanceId, int startX, int startY, const std::vector<MatchResult>& fields);
 
 bool RunCmdHidden(const std::string& command);
+bool AreEmulatorPathsValid();
+std::string GetAdbDevicesList();
 void RunAdbCommand(int instanceId, std::string args);
 void AdbTap(int instanceId, int x, int y);
 void PerformTemplateTest(int instanceId, std::string templatePath, std::string testName, float threshold, bool useGrayscale);
@@ -55,9 +57,6 @@ struct TransferRequest {
 
 extern TransferRequest g_TransferRequest;
 void RunStorageMaster(int instanceId);
-
-extern std::string kLDPlayerAdbPath;
-extern std::string kLDConsolePath;
 
 void EmulatorCrashWatchdog(int instanceId);
 std::string GetUniversalAdbPath(int instanceId);
