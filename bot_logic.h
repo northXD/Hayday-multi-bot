@@ -119,17 +119,40 @@ struct TemplateThresholds {
 };
 
 struct IntervalSettings {
-    int gameLoadWait = 15;
-    int afterHarvestWait = 1500;
-    int afterPlantWait = 1300;
-    int shopEnterWait = 2000;
-    int crateClickWait = 800;
-    int nextAccountWait = 2000;
-    int coinCollectWait = 700;
-    int productSelectWait = 500;
-    int createSaleWait = 1000;
-
+    // --- Startup ---
+    int gameLoadWait = 15;        // saniye (seconds) - oyunun acilmasini bekleme
+    // --- Farming (tarla) ---
+    int afterHarvestWait = 1500;  // hasat sonrasi
+    int afterPlantWait = 1300;    // ekim sonrasi
+    int fieldTapWait = 300;       // tarla/tohum dokunuslari arasi kisa bekleme
+    // --- Navigation (genel gecis) ---
+    int menuCloseWait = 800;      // bir menuyu (X) kapattiktan sonra
+    int tapResponseWait = 1000;   // dokunustan sonra arayuzun tepkisini bekleme
+    int pageLoadWait = 1500;      // sayfa/ekran gecislerinin yuklenmesi
+    // --- Shop / Sales (dukkan) ---
+    int shopSearchWait = 1000;    // dukkan araniyor denemeleri arasi
+    int shopEnterWait = 2000;     // dukkan acilmasi
+    int crateOpenWait = 1200;     // dolu kasa acildiktan sonra
+    int crateClickWait = 800;     // kasa menusu
+    int coinCollectWait = 700;    // para toplama
+    int productSelectWait = 500;  // urun secimi
+    int createSaleWait = 1000;    // satis olusturma
+    int saleConfirmWait = 700;    // satis fiyati onaylandiktan sonra
+    // --- Silo / Barn (ambar/silo) ---
+    int siloBarnWait = 2000;      // silo/ambar kontrol beklemesi
+    // --- Account (hesap) ---
+    int nextAccountWait = 2000;   // sonraki hesaba gecis
+    int accountLoadWait = 2500;   // hesap deposu yuklendikten sonra
 };
+
+// --- SCREENSHOT CAPTURE BACKEND ---
+// Ekran goruntusu alma yontemi. WinAPI ana yontemdir (hizli, diske yazmaz);
+// ADB eski/yavas yontemdir ve WinAPI duzgun calismazsa yedek olarak secilir.
+// 0 = WinAPI (fast, host-side GDI capture; default / main method)
+// 1 = ADB    (slow, "adb screencap" -> disk; fallback)
+constexpr int SCREENSHOT_MODE_WINAPI = 0;
+constexpr int SCREENSHOT_MODE_ADB = 1;
+extern int g_ScreenshotMode;
 
 
 

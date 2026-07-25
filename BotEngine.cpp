@@ -497,7 +497,7 @@ void ForceCloseAllMenus(int instanceId) {
         MatchResult crossRes = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold, false);
         if (crossRes.found) {
             AdbTap(instanceId, crossRes.x, crossRes.y);
-            std::this_thread::sleep_for(std::chrono::milliseconds(800));
+            std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.menuCloseWait));
         }
         else {
 			break; // IF THERES NO CROSS FOUND, ASSUME WE ARE BACK TO THE FARM AND STOP
@@ -711,7 +711,7 @@ void InjectImportantFiles(int instanceId) {
             instanceId,
             "shell am force-stop com.supercell.hayday",
             "force stopping Hay Day")) return;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
 
         // 2. CREATE TARGET FOLDERS
         const std::string dataDir = "/data/data/com.supercell.hayday/update/data/";
@@ -845,7 +845,7 @@ void InjectImportantFiles(int instanceId) {
 
         AddLog(instanceId, Tr("All injected files were verified on the emulator."), ImVec4(0, 1, 0, 1));
         StartMinitouchStealth(instanceId);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
         AddLog(instanceId, Tr("Injection completed. All files were pushed and verified."), ImVec4(0, 1, 0, 1));
         }).detach();
 }
@@ -867,7 +867,7 @@ void SaveAccountToSlot(int instanceId, int slotIndex) {
     std::string pullCmd = "pull " + tempSdFile + " \"" + tempRawFile + "\"";
     RunAdbCommand(instanceId, pullCmd);
     RunAdbCommand(instanceId, "shell rm " + tempSdFile);
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
 
     if (fs::exists(tempRawFile) && fs::file_size(tempRawFile) > 0) {
         std::ifstream inFile(tempRawFile, std::ios::binary);
@@ -960,7 +960,7 @@ void LoadAccountFromSlot(int instanceId, int slotIndex) {
 
     fs::remove(tempRawFile);
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
     RunAdbCommand(instanceId, "shell monkey -p com.supercell.hayday -c android.intent.category.LAUNCHER 1");
     AddLog(instanceId, Tr("Account Switched. Game Restarting."), ImVec4(0, 1, 0, 1));
 }
@@ -1414,12 +1414,12 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                 break;
             }
             AddLog(instanceId, std::string(Tr("Searching Shop... ")) + std::to_string(k) + "/5", ImVec4(1, 1, 0, 1));
-            if (!SmartSleep(1000)) return;
+            if (!SmartSleep(g_Intervals.shopSearchWait)) return;
         }
 
         if (!shopFound) {
             AddLog(instanceId, std::string(Tr("Shop NOT found. Retrying... (")) + std::to_string(tryCount) + "/3)", ImVec4(1, 0.5f, 0, 1));
-            if (!SmartSleep(1000)) return;
+            if (!SmartSleep(g_Intervals.shopSearchWait)) return;
             continue;
         }
 
@@ -1483,7 +1483,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
             for (auto& crate : soldCrates) {
                 if (!bot.isRunning) return;
                 AdbTap(instanceId, crate.x, crate.y);
-                if (!SmartSleep(300)) return;
+                if (!SmartSleep(g_Intervals.fieldTapWait)) return;
             }
             if (!SmartSleep(g_Intervals.coinCollectWait)) return;
             continue;
@@ -1517,7 +1517,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
             if (filledCrate.found) {
                 AddLog(instanceId, Tr("Checking advertisement availability..."), ImVec4(1, 1, 0, 1));
                 AdbTap(instanceId, filledCrate.x, filledCrate.y);
-                if (!SmartSleep(1200)) return;
+                if (!SmartSleep(g_Intervals.crateOpenWait)) return;
 
                 cv::Mat editScreen;
                 MatchResult advNowRes;
@@ -1547,14 +1547,14 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                     AdbTap(instanceId, advNowRes.x, advNowRes.y);
                     adPlacedThisCycle = true; // TURN ON ADVERTISE PLACED THIS CYCLE BECAUSE BOT CAN FALSE DETECT AFTER GIVING ADVERTISEMENT AND STILL HAVE SHOP FULL.
                     // SO IF THERES AN ACTIVE ADVERTISEMENT, ALL OF THE PRODUCTS GOING TO SELL ANYWAY, NO NEED TO ENABLE SHOP FULL
-                    if (!SmartSleep(1000)) return;
+                    if (!SmartSleep(g_Intervals.tapResponseWait)) return;
 
                     cv::Mat adScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                     MatchResult createAdRes = FindImage(adScreen, "templates\\createad.png", 0.70f, false);
                     if (createAdRes.found) {
                         AdbTap(instanceId, createAdRes.x, createAdRes.y);
                         AddLog(instanceId, Tr("Advertisement published."), ImVec4(0, 1, 0, 1));
-                        if (!SmartSleep(1000)) return;
+                        if (!SmartSleep(g_Intervals.tapResponseWait)) return;
                     }
 
                     cv::Mat crossScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
@@ -1581,7 +1581,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                         cv::Mat crossScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                         MatchResult crossRes = FindImage(crossScreen, cross_templatePath, g_Thresholds.crossThreshold);
                         if (crossRes.found) AdbTap(instanceId, crossRes.x, crossRes.y);
-                        SmartSleep(800);
+                        SmartSleep(g_Intervals.menuCloseWait);
                     }
                     break;
                 }
@@ -1614,7 +1614,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
             if (barnRes.found) {
                 AdbTap(instanceId, barnRes.x, barnRes.y);
  
-                if (!SmartSleep(2000)) return;
+                if (!SmartSleep(g_Intervals.siloBarnWait)) return;
 
                 cv::Mat fullScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                 if (!fullScreen.empty()) {
@@ -1672,7 +1672,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
 
                 screen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                 MatchResult siloRes = FindImage(screen, silo_market_templatePath, 0.80f);
-                if (siloRes.found) { AdbTap(instanceId, siloRes.x, siloRes.y); SmartSleep(1000); }
+                if (siloRes.found) { AdbTap(instanceId, siloRes.x, siloRes.y); SmartSleep(g_Intervals.tapResponseWait); }
             }
             webhookDoneThisCycle = true;
 
@@ -1746,11 +1746,11 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
 
                     // 1. Close all menus
                     ForceCloseAllMenus(instanceId);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
 
 
                     AdbTap(instanceId, 400, 50);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.accountLoadWait));
 
 
                     bool shopOpened = false;
@@ -1762,7 +1762,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                         if (shopRe.found) {
                             AddLog(instanceId, Tr("Shop found. Opening..."), ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
                             AdbTap(instanceId, shopRe.x, shopRe.y);
-                            std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+                            std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.accountLoadWait));
 
 
                             cv::Mat verifyScr = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
@@ -1780,7 +1780,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                         }
                         else {
                             AddLog(instanceId, Tr("Shop is not visible yet. Waiting..."), ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-                            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                            std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
                         }
                     }
 
@@ -1824,7 +1824,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
 
                     for (int k = 0; k < 10; k++) { AdbTap(instanceId, 467, 173); SmartSleep(100); }
 
-                    AdbTap(instanceId, 400, 240); SmartSleep(300); 
+                    AdbTap(instanceId, 400, 240); SmartSleep(g_Intervals.fieldTapWait); 
 
                     shopScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                     MatchResult saleBtn = FindImage(shopScreen, create_sale_templatePath, g_Thresholds.createSaleThreshold);
@@ -1844,7 +1844,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                         if (g_TransferRequest.transferComplete) {
                             AddLog(instanceId, Tr("Transfer completed. Collecting coins..."), ImVec4(0, 1, 0, 1));
                             AdbTap(instanceId, g_TransferRequest.targetSlotX, g_TransferRequest.targetSlotY);
-                            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                            std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
 
                
                             InventoryData& inv = bot.accounts[accountIndex].currentInv;
@@ -1900,11 +1900,11 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
             MatchResult crossRes = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold);
             if (crossRes.found) {
                 AdbTap(instanceId, crossRes.x, crossRes.y);
-                SmartSleep(700); 
+                SmartSleep(g_Intervals.saleConfirmWait); 
                 MatchResult crossRes = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold);
                 if (crossRes.found) {
                     AdbTap(instanceId, crossRes.x, crossRes.y);
-					SmartSleep(700);
+					SmartSleep(g_Intervals.saleConfirmWait);
                 }
             }
             break; 
@@ -1936,7 +1936,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
                 AddLog(instanceId, Tr("Placing Advertisement..."), ImVec4(0, 1, 0, 1));
                 AdbTap(instanceId, adRes.x, adRes.y);
                 adPlacedThisCycle = true; // CONFIRM THAT AD WAS PLACED IN THIS CYCLE.
-                if (!SmartSleep(300)) return;
+                if (!SmartSleep(g_Intervals.fieldTapWait)) return;
                 bot.accounts[accountIndex].lastAdTime = now;
             }
         }
@@ -1956,7 +1956,7 @@ void RunSalesCycle(int instanceId, int accountIndex,bool isEmergency) {
 			AdbTap(instanceId, 464, 384); // COORDINATES JUST IN CASE.    
         }
     }
-	SmartSleep(1000);
+	SmartSleep(g_Intervals.tapResponseWait);
     cv::Mat finalScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
     MatchResult crossRes = FindImage(finalScreen, market_close_crosstemplatePath, g_Thresholds.marketCloseCrossThreshold);
     if (crossRes.found) AdbTap(instanceId, crossRes.x, crossRes.y);
@@ -2151,7 +2151,7 @@ void RunPremiumBot(int instanceId) {
                     bot.accounts[i].level = ReadGameNumber(curScreen, cv::Rect(16, 8, 22, 20), "lvl");
 
                     AdbTap(instanceId, 25, 18);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(800)); 
+                    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.menuCloseWait)); 
                     cv::Mat profileScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
 
                     
@@ -2216,7 +2216,7 @@ void RunPremiumBot(int instanceId) {
                 int anchorX = allGrown[0].x;
                 int anchorY = allGrown[0].y;
                 AdbTap(instanceId, anchorX, anchorY);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1200)); 
+                std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.crateOpenWait)); 
 
                 // 3. FIND SICKLE
                 MatchResult sickleRes;
@@ -2249,7 +2249,7 @@ void RunPremiumBot(int instanceId) {
                         MatchResult crossRes = FindImage(siloScreen, silo_full_cross_templatePath, g_Thresholds.siloFullCrossThreshold, false);
                         if (crossRes.found) AdbTap(instanceId, crossRes.x, crossRes.y);
                         else AdbTap(instanceId, siloFullRes.x, siloFullRes.y);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
                         return 2;
                     }
 
@@ -2309,7 +2309,7 @@ void RunPremiumBot(int instanceId) {
                         savedTomY = tomRes.y;
 
                         AdbTap(instanceId, tomRes.x, tomRes.y);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
 
                         screen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                         barnCheck = FindImage(screen, "templates\\tom_barn.png", 0.80f, false);
@@ -2325,7 +2325,7 @@ void RunPremiumBot(int instanceId) {
                     MatchResult crossRes = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold, false);
                     if (crossRes.found) {
                         AdbTap(instanceId, crossRes.x, crossRes.y);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
                     }
                 }
 
@@ -2336,7 +2336,7 @@ void RunPremiumBot(int instanceId) {
                     if (failCross.found) {
                         AddLog(instanceId, Tr("Closing stuck menu before returning to farm..."), ImVec4(1, 0.5f, 0, 1));
                         AdbTap(instanceId, failCross.x, failCross.y);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
                     }
                     return false;
                 }
@@ -2346,7 +2346,7 @@ void RunPremiumBot(int instanceId) {
                 MatchResult catRes = FindImage(finalScreen, catTemplate, 0.80f, false);
                 if (catRes.found) {
                     AdbTap(instanceId, catRes.x, catRes.y);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
                 }
 
                 int SEARCH_ICON_X = 150;   
@@ -2359,17 +2359,17 @@ void RunPremiumBot(int instanceId) {
                 int YES_BUTTON_Y = 291;    
 
                 AdbTap(instanceId, SEARCH_ICON_X, SEARCH_ICON_Y);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
 
                 AddLog(instanceId, Tr("Focusing on search text box..."), ImVec4(0.8f, 0.8f, 0.2f, 1.0f));
                 AdbTap(instanceId, TEXT_BOX_X, TEXT_BOX_Y);
-                std::this_thread::sleep_for(std::chrono::milliseconds(800));
+                std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.menuCloseWait));
 
                 RunAdbCommand(instanceId, "shell input text '" + bot.accounts[i].tomItemName + "'");
-                std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
 
                 AdbTap(instanceId, FIRST_ITEM_X, FIRST_ITEM_Y);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
 
                 AdbTap(instanceId, YES_BUTTON_X, YES_BUTTON_Y);
 
@@ -2384,7 +2384,7 @@ void RunPremiumBot(int instanceId) {
                     AddLog(instanceId, Tr("Tom is back! Clicking saved Crate location..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
                     bot.statusText = Tr("Opening Tom Boxes...");
                     AdbTap(instanceId, savedTomX, savedTomY);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(2500)); 
+                    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.accountLoadWait)); 
                 }
                 else {
                     AddLog(instanceId, Tr("Saved location missing, searching crate again..."), ImVec4(1, 0.5f, 0, 1));
@@ -2392,7 +2392,7 @@ void RunPremiumBot(int instanceId) {
                     MatchResult retTom = FindImage(retScreen, "templates\\tom_crate.png", 0.75f, false);
                     if (retTom.found) {
                         AdbTap(instanceId, retTom.x, retTom.y);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.accountLoadWait));
                     }
                 }
 
@@ -2404,7 +2404,7 @@ void RunPremiumBot(int instanceId) {
                 int BOX_LEFT_Y = 316;
 
                 AdbTap(instanceId, BOX_RIGHT_X, BOX_RIGHT_Y);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
 
                 cv::Mat screen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                 MatchResult crossRes = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold, false);
@@ -2412,10 +2412,10 @@ void RunPremiumBot(int instanceId) {
                 if (crossRes.found) {
                     AddLog(instanceId, Tr("Not enough coins for Max Stack! Falling back to Mid..."), ImVec4(1, 0.5f, 0, 1));
                     AdbTap(instanceId, crossRes.x, crossRes.y);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
 
                     AdbTap(instanceId, BOX_MID_X, BOX_MID_Y);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
 
                     screen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                     MatchResult crossRes2 = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold, false);
@@ -2423,10 +2423,10 @@ void RunPremiumBot(int instanceId) {
                     if (crossRes2.found) {
                         AddLog(instanceId, Tr("Still poor! Falling back to Min Stack..."), ImVec4(1, 0.5f, 0, 1));
                         AdbTap(instanceId, crossRes2.x, crossRes2.y);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
 
                         AdbTap(instanceId, BOX_LEFT_X, BOX_LEFT_Y);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
                     }
                 }
 
@@ -2441,7 +2441,7 @@ void RunPremiumBot(int instanceId) {
                     AddLog(instanceId, Tr("Tom delivered! Collecting items..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
                     bot.statusText = Tr("Collecting Items...");
                     AdbTap(instanceId, savedTomX, savedTomY);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(2500)); 
+                    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.accountLoadWait)); 
                 }
                 else {
                     AddLog(instanceId, Tr("Saved location missing, searching crate to collect..."), ImVec4(1, 0.5f, 0, 1));
@@ -2449,7 +2449,7 @@ void RunPremiumBot(int instanceId) {
                     MatchResult retTom = FindImage(retScreen, "templates\\tom_crate.png", 0.75f, false);
                     if (retTom.found) {
                         AdbTap(instanceId, retTom.x, retTom.y);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.accountLoadWait));
                     }
                 }
 
@@ -2497,7 +2497,7 @@ void RunPremiumBot(int instanceId) {
                         if (contRes.found) AdbTap(instanceId, contRes.x, contRes.y);
                         else AdbTap(instanceId, screen.cols / 2, screen.rows - 50);
 
-                        std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.accountLoadWait));
                         plantAttempt--;
                         continue;
                     }
@@ -2515,7 +2515,7 @@ void RunPremiumBot(int instanceId) {
 
 						// TAP THE FIRST FIELD TO OPEN SEED MENU
                         AdbTap(instanceId, tempAnchorX, tempAnchorY);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.crateOpenWait));
 
                         screen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                         MatchResult seedRes = FindImage(screen, currentSeedTemplate, currentSeedThresh, false);
@@ -2604,7 +2604,7 @@ void RunPremiumBot(int instanceId) {
                 cv::Mat screen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                 MatchResult crossRes = FindImage(screen, cross_templatePath, g_Thresholds.crossThreshold, false);
                 if (crossRes.found) AdbTap(instanceId, crossRes.x, crossRes.y);
-                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
 
                 bot.statusText = Tr("Retrying Harvest...");
                 int retryHarvestStatus = TryHarvest();
@@ -2806,20 +2806,20 @@ bool NXRTH_Radar(int instanceId, std::string targetName, int mode, bool skipMenu
 
     if (!skipMenuOpen) {
         ForceCloseAllMenus(instanceId);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
 
         cv::Mat scr = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
         MatchResult fRes = FindImage(scr, "templates\\friends.png", 0.65f, false, 1.0f, false);
         if (fRes.found) {
             AdbTap(instanceId, fRes.x, fRes.y);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
         }
 
         scr = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
         MatchResult bookRes = FindImage(scr, "templates\\friends_book.png", 0.70f, false, 1.0f, false);
         if (bookRes.found) {
             AdbTap(instanceId, bookRes.x, bookRes.y);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+            std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
         }
     }
     else {
@@ -2829,9 +2829,9 @@ bool NXRTH_Radar(int instanceId, std::string targetName, int mode, bool skipMenu
     if (mode == 0) {
         AddLog(instanceId, Tr("Opening the in-game friends tab..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
         AdbTap(instanceId, 280, 117);
-        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.fieldTapWait));
         AdbTap(instanceId, 280, 117); 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
     }
     else {
         AddLog(instanceId, Tr("Scanning the friend requests tab..."), ImVec4(0.8f, 0.4f, 1.0f, 1.0f));
@@ -2946,7 +2946,7 @@ bool NXRTH_Radar(int instanceId, std::string targetName, int mode, bool skipMenu
 
         AddLog(instanceId, Tr("Account not visible yet. Scrolling..."), ImVec4(1, 1, 0, 1));
         RunAdbCommand(instanceId, "shell input swipe 300 350 300 300 1000");
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
     }
 
     AddLog(instanceId, std::string(Tr("Account not found: ")) + targetName, ImVec4(1, 0.2f, 0.2f, 1));
@@ -3006,7 +3006,7 @@ void RunStorageMaster(int instanceId) {
 
                         if (shopRes.found) {
                             AdbTap(instanceId, shopRes.x, shopRes.y);
-                            std::this_thread::sleep_for(std::chrono::milliseconds(2500)); 
+                            std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.accountLoadWait)); 
 
                             
                             cv::Mat verifyScr = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
@@ -3016,7 +3016,7 @@ void RunStorageMaster(int instanceId) {
                                 break;
                             }
                         }
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
                     }
 
                     if (shopVerified) {
@@ -3037,7 +3037,7 @@ void RunStorageMaster(int instanceId) {
 
                             if (g_TransferRequest.itemListed) {
                                 AddLog(instanceId, Tr("Item listed. Waiting for synchronization..."), ImVec4(1, 1, 0, 1));
-                                std::this_thread::sleep_for(std::chrono::milliseconds(800));
+                                std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.menuCloseWait));
 
                                 int visitorX = g_TransferRequest.targetSlotX + 30; 
                                 int visitorY = g_TransferRequest.targetSlotY;
@@ -3090,7 +3090,7 @@ void RunStorageMaster(int instanceId) {
                         } 
 
                         ForceCloseAllMenus(instanceId);
-                        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
 
                         cv::Mat homeScreen = CaptureInstanceScreen(instanceId, kAdbPath, bot.adbSerial);
                         MatchResult homeRes = FindImage(homeScreen, "templates\\home.png", 0.70f);
@@ -3126,7 +3126,7 @@ bool SendFriendRequestToStorage(int instanceId, std::string targetTag) {
     ForceCloseAllMenus(instanceId); 
 
   
-    std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.pageLoadWait));
 
     BotInstance& bot = g_Bots[instanceId];
     bool friendsOpened = false;
@@ -3138,7 +3138,7 @@ bool SendFriendRequestToStorage(int instanceId, std::string targetTag) {
 
         if (friendsRes.found) {
             AdbTap(instanceId, friendsRes.x, friendsRes.y);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
             friendsOpened = true;
             break;
         }
@@ -3158,7 +3158,7 @@ bool SendFriendRequestToStorage(int instanceId, std::string targetTag) {
 
         if (bookRes.found) {
             AdbTap(instanceId, bookRes.x, bookRes.y);
-            std::this_thread::sleep_for(std::chrono::milliseconds(800));
+            std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.menuCloseWait));
             bookOpened = true;
             break;
         }
@@ -3182,7 +3182,7 @@ bool SendFriendRequestToStorage(int instanceId, std::string targetTag) {
     if (addRes.found) {
         AdbTap(instanceId, addRes.x, addRes.y);
         AddLog(instanceId, Tr("Friend request sent."), ImVec4(0, 1, 0, 1));
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(g_Intervals.tapResponseWait));
     }
 
     ForceCloseAllMenus(instanceId); 

@@ -85,7 +85,132 @@ static bool RunCmdHiddenLogic(const std::string& command) {
 }
 
 // SCREEN CAPTURING
+
+// PrintWindow bayragi (Windows 8.1+) - eski SDK'larda tanimli olmayabilir.
+#ifndef PW_RENDERFULLCONTENT
+#define PW_RENDERFULLCONTENT 0x00000002
+#endif
+
+// --- WINDOWS API (GDI) ILE HIZLI EKRAN GORUNTUSU ---
+// Emulator penceresini host tarafinda yakalar (diske PNG yazmaz, adb beklemez).
+// Adimlar:
+//   1) Pencereyi basligindan (vmName) bul, PrintWindow ile tum icerigini al.
+//   2) Baslik cubugu/kenarliklari at, sadece client alanini birak.
+//   3) Emulator arac cubugunu (sagda/altta) at: Android render alani sol-ust
+//      koseye yaslidir; hedef en-boy oranina (targetW:targetH) gore kirp.
+//   4) Hedef ADB screencap cozunurlugune yeniden boyutlandir ki tum sablon
+//      koordinatlari ve dokunuslar (input tap) aynen calismaya devam etsin.
+// Basarisiz olursa (pencere yok / GPU siyah kare) bos Mat doner; cagiran
+// fonksiyon otomatik olarak ADB yontemine geri duser.
+static cv::Mat CaptureWindowGDI(const char* windowTitle, int targetW, int targetH) {
+    if (!windowTitle || windowTitle[0] == '\0' || targetW <= 0 || targetH <= 0)
+        return cv::Mat();
+
+    HWND hwnd = FindWindowA(NULL, windowTitle);
+    if (!hwnd || !IsWindow(hwnd)) return cv::Mat();
+
+    RECT wr;
+    if (!GetWindowRect(hwnd, &wr)) return cv::Mat();
+    int fullW = wr.right - wr.left;
+    int fullH = wr.bottom - wr.top;
+    if (fullW <= 0 || fullH <= 0) return cv::Mat();
+
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hbm = CreateCompatibleBitmap(hdcScreen, fullW, fullH);
+    HGDIOBJ oldObj = SelectObject(hdcMem, hbm);
+
+    // PrintWindow: pencereyi (GPU icerigi dahil) DC'ye cizdirir; pencerenin on
+    // planda / gorunur olmasi gerekmez, arka planda calisirken de yakalar.
+    BOOL ok = PrintWindow(hwnd, hdcMem, PW_RENDERFULLCONTENT);
+    if (!ok) ok = PrintWindow(hwnd, hdcMem, 0);
+
+    // GetDIBits icin bitmap DC'ye secili OLMAMALI (MSDN); once eski nesneyi geri koy.
+    SelectObject(hdcMem, oldObj);
+
+    cv::Mat full;
+    if (ok) {
+        BITMAPINFOHEADER bi = {};
+        bi.biSize = sizeof(BITMAPINFOHEADER);
+        bi.biWidth = fullW;
+        bi.biHeight = -fullH;   // negatif => top-down (satirlar yukaridan asagi)
+        bi.biPlanes = 1;
+        bi.biBitCount = 32;
+        bi.biCompression = BI_RGB;
+
+        cv::Mat bgra(fullH, fullW, CV_8UC4);
+        if (GetDIBits(hdcScreen, hbm, 0, fullH, bgra.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS)) {
+            cv::cvtColor(bgra, full, cv::COLOR_BGRA2BGR);   // cv::imread ile ayni (BGR)
+        }
+    }
+
+    DeleteObject(hbm);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+
+    if (full.empty()) return cv::Mat();
+
+    // 2) Client alanini tam pencere goruntusunden kes (baslik + kenarliklar).
+    RECT cr;
+    POINT tl = { 0, 0 };
+    if (GetClientRect(hwnd, &cr) && ClientToScreen(hwnd, &tl)) {
+        int offX = tl.x - wr.left;
+        int offY = tl.y - wr.top;
+        int cw = cr.right - cr.left;
+        int ch = cr.bottom - cr.top;
+        if (cw > 0 && ch > 0 && offX >= 0 && offY >= 0 &&
+            offX + cw <= full.cols && offY + ch <= full.rows) {
+            full = full(cv::Rect(offX, offY, cw, ch)).clone();
+        }
+    }
+
+    // 3) Render alanina kirp (arac cubugunu at). Render sol-ust koseye yasli.
+    double targetAR = (double)targetW / (double)targetH;
+    int cw = full.cols, ch = full.rows;
+    int renderW, renderH;
+    int fitW = (int)(ch * targetAR + 0.5);
+    if (fitW <= cw) {           // arac cubugu sagda
+        renderW = fitW;
+        renderH = ch;
+    }
+    else {                      // arac cubugu altta
+        renderW = cw;
+        renderH = (int)(cw / targetAR + 0.5);
+    }
+    if (renderW > 0 && renderH > 0 && renderW <= full.cols && renderH <= full.rows) {
+        full = full(cv::Rect(0, 0, renderW, renderH));
+    }
+
+    // Basarisiz GPU yakalamalarini (tamamen siyah kare) reddet -> ADB'ye dus.
+    cv::Scalar m = cv::mean(full);
+    if (m[0] + m[1] + m[2] < 3.0) return cv::Mat();
+
+    cv::Mat out;
+    cv::resize(full, out, cv::Size(targetW, targetH), 0, 0, cv::INTER_AREA);
+    return out;
+}
+
+// Her instance icin referans (ADB screencap) cozunurlugu. Ilk basarili ADB
+// yakalamasindan ogrenilir; WinAPI goruntuleri bu boyuta olceklenir ki
+// koordinatlar birebir uyusun.
+static int g_RefCapW[kMaxInstanceCount] = { 0 };
+static int g_RefCapH[kMaxInstanceCount] = { 0 };
+
 cv::Mat CaptureInstanceScreen(int instanceId, const std::string& adbPath, const std::string& serial) {
+    // --- HIZLI YOL: WINDOWS API (GDI) ---
+    if (g_ScreenshotMode == SCREENSHOT_MODE_WINAPI &&
+        instanceId >= 0 && instanceId < (int)g_Bots.size() && instanceId < kMaxInstanceCount) {
+        int tw = g_RefCapW[instanceId];
+        int th = g_RefCapH[instanceId];
+        if (tw > 0 && th > 0) {
+            cv::Mat win = CaptureWindowGDI(g_Bots[instanceId].vmName, tw, th);
+            if (!win.empty()) return win;
+            // WinAPI basarisiz (pencere kapali / siyah kare) -> asagida ADB'ye dus.
+        }
+        // Henuz referans boyut yok -> bir kez ADB ile yakala (boyutu da ogrenir).
+    }
+
+    // --- YEDEK / VARSAYILAN YOL: ADB screencap -> disk ---
     std::string tempFile = "C:\\Users\\Public\\adb_screen_" + std::to_string(instanceId) + ".png";
     int maxRetries = 2;
     cv::Mat img;
@@ -98,7 +223,14 @@ cv::Mat CaptureInstanceScreen(int instanceId, const std::string& adbPath, const 
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
             if (IsFileValid(tempFile)) {
                 img = cv::imread(tempFile);
-                if (!img.empty()) return img;
+                if (!img.empty()) {
+                    // WinAPI yeniden boyutlandirmasi icin referans cozunurlugu kaydet.
+                    if (instanceId >= 0 && instanceId < kMaxInstanceCount) {
+                        g_RefCapW[instanceId] = img.cols;
+                        g_RefCapH[instanceId] = img.rows;
+                    }
+                    return img;
+                }
             }
         }
         // RETRY IF FAILED

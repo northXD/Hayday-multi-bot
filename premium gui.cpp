@@ -231,6 +231,9 @@ char g_marketCloseCrossPathBuf[260] = "templates\\market_close_cross.png";
 
 IntervalSettings g_Intervals;
 
+// Ekran goruntusu alma yontemi (0 = WinAPI hizli / varsayilan, 1 = ADB yavas yedek).
+int g_ScreenshotMode = SCREENSHOT_MODE_WINAPI;
+
 
 
 // =========================================================
@@ -468,17 +471,27 @@ void SaveConfig() {
         out << "WebhookURL=" << g_WebhookURL << "\n";
         
         out << "EnableBarnWebhook=" << (g_EnableBarnWebhook ? "1" : "0") << "\n";
-        out << "EnableWebhookImage=" << (g_EnableWebhookImage ? "1" : "0") << "\n"; 
+        out << "EnableWebhookImage=" << (g_EnableWebhookImage ? "1" : "0") << "\n";
+        out << "ScreenshotMode=" << g_ScreenshotMode << "\n";
         out << "GameLoadWait=" << g_Intervals.gameLoadWait << "\n";
         out << "AfterHarvestWait=" << g_Intervals.afterHarvestWait << "\n";
         out << "AfterPlantWait=" << g_Intervals.afterPlantWait << "\n";
+        out << "FieldTapWait=" << g_Intervals.fieldTapWait << "\n";
+        out << "MenuCloseWait=" << g_Intervals.menuCloseWait << "\n";
+        out << "TapResponseWait=" << g_Intervals.tapResponseWait << "\n";
+        out << "PageLoadWait=" << g_Intervals.pageLoadWait << "\n";
+        out << "ShopSearchWait=" << g_Intervals.shopSearchWait << "\n";
         out << "ShopEnterWait=" << g_Intervals.shopEnterWait << "\n";
+        out << "CrateOpenWait=" << g_Intervals.crateOpenWait << "\n";
         out << "CrateClickWait=" << g_Intervals.crateClickWait << "\n";
         out << "NextAccountWait=" << g_Intervals.nextAccountWait << "\n";
-       
+
         out << "CoinCollectWait=" << g_Intervals.coinCollectWait << "\n";
         out << "ProductSelectWait=" << g_Intervals.productSelectWait << "\n";
         out << "CreateSaleWait=" << g_Intervals.createSaleWait << "\n";
+        out << "SaleConfirmWait=" << g_Intervals.saleConfirmWait << "\n";
+        out << "SiloBarnWait=" << g_Intervals.siloBarnWait << "\n";
+        out << "AccountLoadWait=" << g_Intervals.accountLoadWait << "\n";
         out << "TransferThreshold=" << g_TransferThreshold << "\n";
         out << "StorageTag=" << g_StorageTagBuf << "\n";
         out << "GlobalEmuMode=" << g_GlobalEmulatorMode << "\n";
@@ -535,10 +548,20 @@ void LoadConfig() {
                
                 else if (key == "EnableWebhookImage") g_EnableWebhookImage = (val == "1"); 
                 else if (key == "DiscordID") strncpy(g_DiscordID, val.c_str(), 64);
+                else if (key == "ScreenshotMode") {
+                    g_ScreenshotMode = std::stoi(val);
+                    if (g_ScreenshotMode != SCREENSHOT_MODE_ADB) g_ScreenshotMode = SCREENSHOT_MODE_WINAPI;
+                }
                 else if (key == "GameLoadWait") g_Intervals.gameLoadWait = std::stoi(val);
                 else if (key == "AfterHarvestWait") g_Intervals.afterHarvestWait = std::stoi(val);
                 else if (key == "AfterPlantWait") g_Intervals.afterPlantWait = std::stoi(val);
+                else if (key == "FieldTapWait") g_Intervals.fieldTapWait = std::stoi(val);
+                else if (key == "MenuCloseWait") g_Intervals.menuCloseWait = std::stoi(val);
+                else if (key == "TapResponseWait") g_Intervals.tapResponseWait = std::stoi(val);
+                else if (key == "PageLoadWait") g_Intervals.pageLoadWait = std::stoi(val);
+                else if (key == "ShopSearchWait") g_Intervals.shopSearchWait = std::stoi(val);
                 else if (key == "ShopEnterWait") g_Intervals.shopEnterWait = std::stoi(val);
+                else if (key == "CrateOpenWait") g_Intervals.crateOpenWait = std::stoi(val);
                 else if (key == "CrateClickWait") g_Intervals.crateClickWait = std::stoi(val);
                 else if (key == "NextAccountWait") g_Intervals.nextAccountWait = std::stoi(val);
                 
@@ -552,6 +575,9 @@ void LoadConfig() {
                 else if (key == "CoinCollectWait") g_Intervals.coinCollectWait = std::stoi(val);
                 else if (key == "ProductSelectWait") g_Intervals.productSelectWait = std::stoi(val);
                 else if (key == "CreateSaleWait") g_Intervals.createSaleWait = std::stoi(val);
+                else if (key == "SaleConfirmWait") g_Intervals.saleConfirmWait = std::stoi(val);
+                else if (key == "SiloBarnWait") g_Intervals.siloBarnWait = std::stoi(val);
+                else if (key == "AccountLoadWait") g_Intervals.accountLoadWait = std::stoi(val);
                 else if (key == "TransferThreshold") g_TransferThreshold = std::stoi(val);
 
                 else if (key == "StorageTag") {
@@ -2275,6 +2301,26 @@ void RenderApp() {
             ImGui::PopStyleColor();
             ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
+            // --- SCREENSHOT MODE (WinAPI / ADB) ---
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), Tr("SCREENSHOT MODE"));
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::TextDisabled(Tr("How the bot captures the emulator screen. WinAPI is the fast method (no disk writes). Switch to ADB if WinAPI shows a black screen or misbehaves."));
+            {
+                const char* ssModes = "WinAPI (Fast)\0ADB API (Slow)\0";
+                ImGui::PushItemWidth(220);
+                if (ImGui::Combo(Tr("Capture Method"), &g_ScreenshotMode, ssModes)) {
+                    if (g_ScreenshotMode != SCREENSHOT_MODE_ADB) g_ScreenshotMode = SCREENSHOT_MODE_WINAPI;
+                    SaveConfig();
+                }
+                ImGui::PopItemWidth();
+            }
+            if (g_ScreenshotMode == SCREENSHOT_MODE_WINAPI)
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), Tr("WinAPI: fast host-side capture. Falls back to ADB automatically if a frame fails."));
+            else
+                ImGui::TextColored(ImVec4(0.95f, 0.75f, 0.2f, 1.0f), Tr("ADB: slower legacy capture (writes each frame to disk)."));
+            ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+
             ImGui::Text(Tr("ADB Executable Path:"));
             float inputWidth = ImGui::GetContentRegionAvail().x - 130;
             ImGui::PushItemWidth(inputWidth);
@@ -2323,18 +2369,37 @@ void RenderApp() {
             ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), Tr("TIMING & DELAY SETTINGS (Advanced)"));
             ImGui::Separator();
             ImGui::Spacing();
-            ImGui::TextDisabled(Tr("Adjust these values if your emulator is lagging or running too fast."));
-            ImGui::SliderInt(Tr("Game Load Wait (Seconds)"), &g_Intervals.gameLoadWait, 5, 45);
-            ImGui::SliderInt(Tr("Harvest Cooldown (ms)"), &g_Intervals.afterHarvestWait, 500, 5000);
-            ImGui::SliderInt(Tr("Planting Cooldown (ms)"), &g_Intervals.afterPlantWait, 500, 5000);
-            ImGui::SliderInt(Tr("Shop Open Wait (ms)"), &g_Intervals.shopEnterWait, 500, 5000);
-            ImGui::SliderInt(Tr("Next Account Wait (ms)"), &g_Intervals.nextAccountWait, 500, 5000);
+            ImGui::TextDisabled(Tr("Adjust each wait if your emulator is lagging or running too fast. Higher = slower but safer."));
+
             ImGui::Spacing();
-            ImGui::TextDisabled(Tr("Shop Automation Speeds:"));
+            ImGui::TextDisabled(Tr("Startup & Farming:"));
+            ImGui::SliderInt(Tr("Game Load Wait (Seconds)"), &g_Intervals.gameLoadWait, 5, 45);
+            ImGui::SliderInt(Tr("Harvest Cooldown (ms)"), &g_Intervals.afterHarvestWait, 300, 5000);
+            ImGui::SliderInt(Tr("Planting Cooldown (ms)"), &g_Intervals.afterPlantWait, 300, 5000);
+            ImGui::SliderInt(Tr("Field Tap Wait (ms)"), &g_Intervals.fieldTapWait, 50, 2000);
+
+            ImGui::Spacing();
+            ImGui::TextDisabled(Tr("Navigation:"));
+            ImGui::SliderInt(Tr("Menu Close Wait (ms)"), &g_Intervals.menuCloseWait, 100, 3000);
+            ImGui::SliderInt(Tr("Tap Response Wait (ms)"), &g_Intervals.tapResponseWait, 100, 3000);
+            ImGui::SliderInt(Tr("Page Load Wait (ms)"), &g_Intervals.pageLoadWait, 300, 5000);
+
+            ImGui::Spacing();
+            ImGui::TextDisabled(Tr("Shop & Sales:"));
+            ImGui::SliderInt(Tr("Shop Search Wait (ms)"), &g_Intervals.shopSearchWait, 200, 3000);
+            ImGui::SliderInt(Tr("Shop Open Wait (ms)"), &g_Intervals.shopEnterWait, 500, 5000);
+            ImGui::SliderInt(Tr("Crate Open Wait (ms)"), &g_Intervals.crateOpenWait, 300, 3000);
             ImGui::SliderInt(Tr("Crate Menu Wait (ms)"), &g_Intervals.crateClickWait, 300, 3000);
             ImGui::SliderInt(Tr("Coin Collect Wait (ms)"), &g_Intervals.coinCollectWait, 200, 2000);
             ImGui::SliderInt(Tr("Product Select Wait (ms)"), &g_Intervals.productSelectWait, 200, 2000);
             ImGui::SliderInt(Tr("Create Sale Wait (ms)"), &g_Intervals.createSaleWait, 300, 3000);
+            ImGui::SliderInt(Tr("Sale Confirm Wait (ms)"), &g_Intervals.saleConfirmWait, 200, 2000);
+
+            ImGui::Spacing();
+            ImGui::TextDisabled(Tr("Silo / Barn & Accounts:"));
+            ImGui::SliderInt(Tr("Silo/Barn Check Wait (ms)"), &g_Intervals.siloBarnWait, 500, 5000);
+            ImGui::SliderInt(Tr("Next Account Wait (ms)"), &g_Intervals.nextAccountWait, 500, 5000);
+            ImGui::SliderInt(Tr("Account Load Wait (ms)"), &g_Intervals.accountLoadWait, 500, 6000);
             ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
             
