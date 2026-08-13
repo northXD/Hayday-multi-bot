@@ -3,7 +3,7 @@
 > I have discontinued active development on this project. There will be **no new features or updates**, only critical bug fixes.
 
 ## ⚙️ How to Install
-Tutorial video = https://youtu.be/phLw-jBXr98
+Tutorial video = [https://youtu.be/phLw-jBXr98](https://youtu.be/mlXL28nQWlE)
 1. Go to the [Releases page](https://github.com/northXD/Hayday-multi-bot/releases).
 2. Download the latest version.
 3. Unzip the downloaded folder.
